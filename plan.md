@@ -351,4 +351,4 @@ $ ./gradlew bootRun
 
 | 时间 | 决策 | Git Commit |
 |------|------|------------|
-| 2026-05-09 03:35 CST | Step 1 可以进入执行前准备；开工前补充 Spring AI Anthropic 集成方式、AgentState、StreamEvent、tool_use_id 四个细节。 | 未提交 |
+| 2026-05-09 03:35 CST | Step 1 可以进入执行前准备；开工前补充 Spring AI Anthropic 集成方式、AgentState、StreamEvent、tool_use_id 四个细节。 | b39d7ef |
