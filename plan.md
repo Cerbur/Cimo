@@ -40,9 +40,9 @@ Step 6: 安全加固 + Docker 部署
 | 做 | 不做 |
 |---|------|
 | 全部接口抽象 | 任何 Web/HTTP |
-| CLI 入口（读 stdin + 事件打印） | 消息历史持久化 |
+| CLI 入口（JLine 交互式 REPL + 事件打印） | 消息历史持久化 |
 | Spring AI Anthropic starter 集成（真实 API 调用） | Session 管理 |
-| BashTool 实现（可执行简单命令） | 多会话 |
+| BashTool 实现（Step 1 仅支持 echo） | 多会话 |
 | 完整 Agent Loop（LLM → tool_use → 执行 → 结果回传 → 最终回复） | 用户认证 |
 | Spring Boot 启动即进入 CLI | Docker |
 
@@ -54,7 +54,7 @@ ai.cerbur.cimo
 │
 ├── entry                         ← 入口层：输入来源适配
 │   ├── AgentEntry.java               — 接口：start / submitInput / shutdown
-│   ├── CliAgentEntry.java            — CLI 实现（Scanner → 事件打印到 stdout）
+│   ├── CliAgentEntry.java            — CLI 实现（JLine REPL → 事件打印到 stdout）
 │   └── event/
 │       ├── AgentEvent.java           — 事件密封类
 │       └── AgentEventHandler.java    — 消费者接口
@@ -73,14 +73,14 @@ ai.cerbur.cimo
 │   ├── registry/
 │   │   └── ToolRegistry.java        — 工具注册表（Spring IoC 收集）
 │   └── impl/
-│       └── BashTool.java            — Bash 工具（Step 1 唯一工具）
+│       └── BashTool.java            — Bash 工具（Step 1 唯一工具，仅支持 echo）
 │
 ├── client                         ← LLM Provider 抽象
 │   ├── Client.java                  — 接口：chatStream
 │   ├── ClientFactory.java           — 工厂：读取配置创建
 │   ├── model/
-│   │   ├── ChatMessage.java         — 消息模型（含 toolCallId, toolUseId）
-│   │   ├── ChatRole.java            — 角色枚举（user, assistant, tool）
+│   │   ├── ChatMessage.java         — block-based 消息模型（含 Text / ToolUse / ToolResult）
+│   │   ├── ChatRole.java            — 角色枚举（user, assistant）
 │   │   └── StreamEvent.java         — 流式事件
 │   ├── anthropic/
 │   │   └── SpringAiAnthropicClient.java — Spring AI Anthropic starter 封装
@@ -89,7 +89,7 @@ ai.cerbur.cimo
 │
 └── config
     ├── CimoProperties.java           — 配置属性（provider、api-key、model、work-dir）
-    └── ToolConfig.java               — 工具安全配置（超时、禁止命令）
+    └── ToolConfig.java               — 工具安全配置（超时、白名单命令）
 ```
 
 ### 关键接口
@@ -135,6 +135,7 @@ public interface AgentLoop {
 
 public record AgentContext(
     String workingDirectory,
+    String systemPrompt,
     ToolRegistry toolRegistry,
     int maxToolRounds
 ) {}
@@ -154,17 +155,21 @@ public record ToolResult(
 
 // ==================== client ====================
 
-// ChatMessage: 统一消息模型
-// - toolCallId: 当 role=assistant 且消息是 tool_use block 时，保存 id 用于后续 tool_result 匹配
-// - toolUseId:  当 role=tool 且消息是 tool_result block 时，引用对应的 tool_use block id
+// ChatMessage: block-based 统一消息模型
+// - 一条消息可以包含多个 content block，例如 text + tool_use
+// - tool_result 通过 toolUseId 精确对应前一次 assistant tool_use 的 id
 public record ChatMessage(
     ChatRole role,
-    String content,
-    String toolCallId,   // tool_use 的 id（assistant → tool）
-    String toolUseId     // tool_result 对应的 tool_use_id（tool → assistant）
+    List<ContentBlock> content
 ) {}
 
-public enum ChatRole { USER, ASSISTANT, TOOL }
+public enum ChatRole { USER, ASSISTANT }
+
+public sealed interface ContentBlock {
+    record Text(String text) implements ContentBlock {}
+    record ToolUse(String id, String name, JsonNode input) implements ContentBlock {}
+    record ToolResult(String toolUseId, String content, boolean isError) implements ContentBlock {}
+}
 
 public record StreamEvent(
     StreamEventType type,
@@ -178,16 +183,21 @@ public enum StreamEventType {
     COMPLETE, ERROR
 }
 
+public record ClientRequest(
+    String systemPrompt,
+    List<ChatMessage> messages,
+    List<Tool> tools
+) {}
+
 public interface Client {
     Flux<StreamEvent> chatStream(
-        List<ChatMessage> messages,
-        List<Tool> tools
+        ClientRequest request
     );
 }
 
-// ClientFactory 通过 Spring AI 的 ChatClient.Builder 创建
-// Spring AI Anthropic starter 自动配置 AnthropicChatModel
-// ClientFactory 包装为 Cimo 内部的 Client 接口
+// ClientFactory 使用 Spring AI 管配置、自动配置和 Anthropic 接入
+// Agent Loop 与 tool_result 协议由 Cimo 自己掌控：
+// Spring AI 不负责内部工具执行，不吞掉 tool_use/tool_result 细节
 @Component
 public class ClientFactory {
     public Client createClient() { /* 通过 Spring AI ChatClient 构建 */ }
@@ -206,8 +216,37 @@ cimo:
   tool:
     bash:
       timeout-seconds: 30
-      forbidden-commands: rm, shutdown, reboot, sudo, mkfs, dd
+      allowed-commands: echo
 ```
+
+### System Prompt（Step 1）
+
+Step 1 使用一个很窄的 system prompt，目标是稳定触发 `bash` 工具并避免模型越过当前能力边界：
+
+```text
+You are Cimo, a minimal CLI agent running inside a controlled local harness.
+
+Your job is to help the user by deciding whether to answer directly or call an available tool.
+In this step, the only available tool is `bash`, and it only supports the `echo` command.
+
+When the user asks you to output text through bash, call the `bash` tool with command `echo`
+and pass the text as arguments. Do not invent unavailable tools, do not claim to execute
+commands you did not call, and do not request commands outside the current tool schema.
+
+After a tool result is returned, summarize the result briefly in the user's language.
+If the user asks for anything outside the current Step 1 capability, explain that this
+minimal version only supports echo through bash for now.
+```
+
+### Step 1 执行决策
+
+- **消息模型**：使用 block-based `ChatMessage`，一条消息包含 `List<ContentBlock>`，明确支持 `Text`、`ToolUse`、`ToolResult`。
+- **System Prompt**：不把 system prompt 塞进 `ChatMessage`；通过 `ClientRequest.systemPrompt` 显式传入，由 Anthropic adapter 映射到 provider 原生 system 字段。
+- **Anthropic 接入**：用 Spring AI 管配置、自动配置和 Anthropic 接入；Agent Loop、tool 调用、`tool_result` 回传协议由 Cimo 自己掌控。
+- **CLI 形态**：做成类似 Codex / Claude Code 的启动即交互体验：`./gradlew bootRun` 后进入 `>` 提示符，用户直接输入自然语言；底层用 JLine 读取输入并接入 Spring 生命周期，不采用 Spring Shell 的 `ask ...` 命令模式，也不使用裸 `Scanner`。
+- **Bash 安全边界**：Step 1 的白名单只开放 `echo`；更复杂的命令、参数解析、路径隔离、命令注入防护和沙箱策略全部放到后续安全 Step 中迭代。
+- **BashTool 参数结构**：Step 1 不接收整条 shell 字符串，只接收结构化参数，例如 `{ "command": "echo", "args": ["hello"] }`，执行时由 `BashTool` 组装为受控的 `echo` 调用。
+- **AgentState 命名**：统一使用 `INITIALIZING / RUNNING / WAITING_FOR_TOOL / COMPLETED / ERROR / SHUTDOWN`。
 
 ### Agent Loop 完整流程
 
@@ -274,13 +313,13 @@ cimo:
 **步骤说明：**
 
 ```
-1. CliAgentEntry 读 stdin → AgentLoop.processInput("通过bash输出hello")
-2. AgentLoop 构造 ChatMessage 列表（system prompt + user message）
-3. Client.chatStream(messages, [BashTool描述]) → 请求 Anthropic
+1. CliAgentEntry 通过 JLine REPL 接收自然语言输入 → AgentLoop.processInput("通过bash输出hello")
+2. AgentLoop 构造 ClientRequest（system prompt + ChatMessage 列表 + tools）
+3. Client.chatStream(request) → 请求 Anthropic
 4. 解析流式响应：
    a. content_block_delta (text) → AgentEvent.Response (流式打印)
    b. content_block_start (tool_use) → stop text stream，记录 tool_use_id
-5. ToolRegistry.getTool("bash") → BashTool.execute({command: "echo hello"})
+5. ToolRegistry.getTool("bash") → BashTool.execute({command: "echo", args: ["hello"]})
 6. 构建 tool_result 消息，toolUseId 沿用步骤 4b 记录的 tool_use_id → AgentEvent.ToolResult
 7. AgentLoop 将 tool_result（含 toolUseId）追加入消息历史
 8. Client.chatStream(updatedMessages, ...) → 再次请求 Anthropic
@@ -311,14 +350,16 @@ $ ./gradlew bootRun
 ### Step 1 检查清单
 
 - [ ] 所有包和接口定义完毕
-- [ ] 明确 Anthropic 集成方式：通过 Spring AI 适配到自定义 Client 抽象
-- [ ] CliAgentEntry（Scanner 读输入 + 事件输出）
+- [ ] 明确 Anthropic 集成方式：Spring AI 管配置和接入，Cimo 自己掌控 Agent Loop 与 tool_result 协议
+- [ ] CliAgentEntry（JLine 交互式 REPL + 事件输出）
 - [ ] AgentEvent 模型（sealed class）
-- [ ] AgentState 枚举定义（idle / running / waiting_tool / error / stopped）
+- [ ] AgentState 枚举定义（INITIALIZING / RUNNING / WAITING_FOR_TOOL / COMPLETED / ERROR / SHUTDOWN）
+- [ ] ChatMessage 改为 block-based 模型（Text / ToolUse / ToolResult）
+- [ ] System prompt 通过 ClientRequest 显式传入
 - [ ] SpringAiAnthropicClient 流式调用 + tool_use 响应解析
 - [ ] StreamEvent 支持 text_delta / tool_use_start / tool_input_delta / message_stop 等最小事件
 - [ ] tool_use_id 在消息历史中保存，并用于后续 tool_result 回传
-- [ ] BashTool（安全限制：超时 + 禁止命令）
+- [ ] BashTool（安全限制：超时 + 白名单仅 echo）
 - [ ] ToolRegistry（Spring 自动收集 Tool Bean）
 - [ ] ToolSpec（Tool → Anthropic Tool Schema 转换）
 - [ ] DefaultAgentLoop（完整 Loop 编排）
@@ -352,3 +393,5 @@ $ ./gradlew bootRun
 | 时间 | 决策 | Git Commit |
 |------|------|------------|
 | 2026-05-09 03:35 CST | Step 1 可以进入执行前准备；开工前补充 Spring AI Anthropic 集成方式、AgentState、StreamEvent、tool_use_id 四个细节。 | b39d7ef |
+| 2026-05-09 12:15 CST | Step 1 执行决策：ChatMessage 使用 block-based 模型；Spring AI 负责配置和 Anthropic 接入，Cimo 自己掌控 Agent Loop 与 tool_result 协议；CLI 使用 Spring Shell；BashTool 先采用白名单命令；AgentState 命名统一为大写枚举。 | f1704a0 |
+| 2026-05-09 12:23 CST | Step 1 进一步收窄：BashTool 白名单仅支持 echo；system prompt 通过 ClientRequest 独立传入；CLI 采用类似 Codex / Claude Code 的 JLine 交互式 REPL，而不是 Spring Shell 命令模式。 | 未提交 |
