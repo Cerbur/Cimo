@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 import ai.cerbur.cimo.client.anthropic.SpringAiAnthropicClient;
 import ai.cerbur.cimo.client.openai.OpenAiClient;
 import ai.cerbur.cimo.config.AnthropicProperties;
+import ai.cerbur.cimo.config.SpringEnvironmentReader;
 
 @Component
 public class ClientFactory {
@@ -45,6 +46,7 @@ public class ClientFactory {
 
     private AnthropicChatModel createAnthropicChatModel() {
         validateAnthropicProperties();
+        printAnthropicDebugConfigIfEnabled();
         AnthropicChatOptions.Builder options = AnthropicChatOptions.builder()
                 .apiKey(anthropicProperties.apiKey())
                 .model(anthropicProperties.model())
@@ -59,6 +61,36 @@ public class ClientFactory {
         requireNonBlank(anthropicProperties.model(), "cimo.anthropic.model");
         requireNonBlank(anthropicProperties.baseUrl(), "cimo.anthropic.base-url");
         requireHttpUrl(anthropicProperties.baseUrl(), "cimo.anthropic.base-url");
+    }
+
+    /**
+     * 在全局调试开关打开时打印已绑定的 Anthropic 配置，帮助确认 CLI 启动时实际读取到的值。
+     */
+    private void printAnthropicDebugConfigIfEnabled() {
+        boolean debug = SpringEnvironmentReader.getBoolean("cimo.debug", false);
+        if (!debug) {
+            return;
+        }
+        System.out.println("Anthropic config: "
+                + "model=" + anthropicProperties.model()
+                + ", baseUrl=" + anthropicProperties.baseUrl()
+                + ", maxTokens=" + anthropicProperties.maxTokens()
+                + ", debug=" + debug
+                + ", apiKey=" + maskApiKey(anthropicProperties.apiKey()));
+    }
+
+    /**
+     * API key 只暴露首尾少量字符，避免 debug 输出泄露完整凭证。
+     */
+    private static String maskApiKey(String apiKey) {
+        if (apiKey == null || apiKey.isBlank()) {
+            return "";
+        }
+        String trimmed = apiKey.trim();
+        if (trimmed.length() <= 8) {
+            return "*".repeat(trimmed.length());
+        }
+        return trimmed.substring(0, 4) + "..." + trimmed.substring(trimmed.length() - 4);
     }
 
     private static void requireNonBlank(String value, String propertyName) {

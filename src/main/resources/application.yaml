@@ -4,6 +4,7 @@ spring:
 
 cimo:
   provider: anthropic
+  debug: false
   work-dir: ${user.dir}/Documents/Code/Cimo/.tmp
   anthropic:
     api-key: ${ANTHROPIC_AUTH_TOKEN:}

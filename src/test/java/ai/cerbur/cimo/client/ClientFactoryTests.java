@@ -4,16 +4,28 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.mock.env.MockEnvironment;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import ai.cerbur.cimo.client.openai.OpenAiClient;
 import ai.cerbur.cimo.config.AnthropicProperties;
+import ai.cerbur.cimo.config.SpringEnvironmentReader;
 
+@ExtendWith(OutputCaptureExtension.class)
 class ClientFactoryTests {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @AfterEach
+    void clearEnvironment() {
+        SpringEnvironmentReader.useEnvironmentForTests(null);
+    }
 
     @Test
     void anthropicProviderRequiresApiKey() {
@@ -81,7 +93,46 @@ class ClientFactoryTests {
         assertThatCode(factory::createClient).doesNotThrowAnyException();
     }
 
+    @Test
+    void anthropicDebugDisabledDoesNotPrintConfig(CapturedOutput output) {
+        ClientFactory factory = anthropicFactory(
+                "test-key-secret",
+                "claude-sonnet-4-20250514",
+                "https://api.anthropic.com",
+                false);
+
+        factory.createClient();
+
+        assertThat(output).doesNotContain("Anthropic config:");
+    }
+
+    @Test
+    void anthropicDebugEnabledPrintsSafeConfig(CapturedOutput output) {
+        ClientFactory factory = anthropicFactory(
+                "test-key-secret",
+                "claude-sonnet-4-20250514",
+                "https://api.anthropic.com",
+                true);
+
+        factory.createClient();
+
+        assertThat(output)
+                .contains("Anthropic config:")
+                .contains("model=claude-sonnet-4-20250514")
+                .contains("baseUrl=https://api.anthropic.com")
+                .contains("maxTokens=4096")
+                .contains("debug=true")
+                .contains("apiKey=test...cret")
+                .doesNotContain("test-key-secret");
+    }
+
     private ClientFactory anthropicFactory(String apiKey, String model, String baseUrl) {
+        return anthropicFactory(apiKey, model, baseUrl, false);
+    }
+
+    private ClientFactory anthropicFactory(String apiKey, String model, String baseUrl, boolean debug) {
+        SpringEnvironmentReader.useEnvironmentForTests(
+                new MockEnvironment().withProperty("cimo.debug", Boolean.toString(debug)));
         return new ClientFactory(
                 "anthropic",
                 new AnthropicProperties(apiKey, model, baseUrl, 4096),
