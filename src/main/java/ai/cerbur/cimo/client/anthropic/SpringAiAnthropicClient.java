@@ -31,10 +31,12 @@ public class SpringAiAnthropicClient implements Client {
 
     private final AnthropicChatModel chatModel;
     private final ObjectMapper objectMapper;
+    private final int maxTokens;
 
-    public SpringAiAnthropicClient(AnthropicChatModel chatModel, ObjectMapper objectMapper) {
+    public SpringAiAnthropicClient(AnthropicChatModel chatModel, ObjectMapper objectMapper, int maxTokens) {
         this.chatModel = chatModel;
         this.objectMapper = objectMapper;
+        this.maxTokens = maxTokens;
     }
 
     @Override
@@ -98,7 +100,7 @@ public class SpringAiAnthropicClient implements Client {
 
     private AnthropicChatOptions toAnthropicOptions(ClientRequest request) {
         return AnthropicChatOptions.builder()
-                .maxTokens(1024)
+                .maxTokens(maxTokens)
                 .internalToolExecutionEnabled(false)
                 .disableParallelToolUse(true)
                 .toolCallbacks(request.tools().stream().map(this::toToolCallback).toList())

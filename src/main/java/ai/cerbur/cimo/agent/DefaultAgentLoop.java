@@ -25,7 +25,7 @@ import ai.cerbur.cimo.tool.ToolResult;
 public class DefaultAgentLoop implements AgentLoop {
 
     private final Client client;
-    private final MessageHistory history = new MessageHistory(40);
+    private final MessageHistory history = new MessageHistory();
     private AgentContext context;
     private AgentEventHandler handler;
 

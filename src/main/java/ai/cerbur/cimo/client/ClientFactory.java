@@ -29,7 +29,10 @@ public class ClientFactory {
 
     public Client createClient() {
         if ("anthropic".equals(provider)) {
-            return new SpringAiAnthropicClient(createAnthropicChatModel(), objectMapper);
+            return new SpringAiAnthropicClient(
+                    createAnthropicChatModel(),
+                    objectMapper,
+                    anthropicProperties.maxTokens());
         }
         if ("openai".equals(provider)) {
             return new OpenAiClient();

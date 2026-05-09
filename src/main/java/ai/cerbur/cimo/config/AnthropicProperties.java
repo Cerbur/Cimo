@@ -6,11 +6,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record AnthropicProperties(
         String apiKey,
         String model,
-        String baseUrl) {
+        String baseUrl,
+        int maxTokens) {
 
     public AnthropicProperties {
         apiKey = apiKey == null ? "" : apiKey;
         model = model == null || model.isBlank() ? "claude-sonnet-4-20250514" : model;
         baseUrl = baseUrl == null || baseUrl.isBlank() ? "https://api.anthropic.com" : baseUrl;
+        maxTokens = maxTokens <= 0 ? 4096 : maxTokens;
     }
 }
