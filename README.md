@@ -8,7 +8,7 @@ Cimo 是一个从零开始构建的 Agent Harness 项目，会从一个小型 CL
 
 Cimo 当前处于规划阶段。
 
-开发流程遵循 [Agents.md](Agents.md)：
+开发流程遵循 [AGENTS.md](AGENTS.md)：
 
 - 先完善计划，再开始编码。
 - 关键决策和计划完成记录都维护在 `plan.md` 中。
@@ -31,7 +31,7 @@ Cimo 当前处于规划阶段。
 - Spring Boot 4
 - Gradle
 - Spring AI / Anthropic 集成
-- Spring Shell
+- JLine CLI REPL
 
 ## 开发
 

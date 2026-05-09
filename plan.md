@@ -66,12 +66,14 @@ ai.cerbur.cimo
 │   └── history/
 │       └── MessageHistory.java       — 消息历史（内存，不做持久化）
 │
+├── prompt                         ← 提示词集中维护
+│   └── CimoPrompts.java              — Step 1 system prompt；后续 prompt 常量/模板统一从这里扩展
+│
 ├── tool                           ← 工具定义 + 实现
 │   ├── Tool.java                    — 接口
 │   ├── ToolResult.java              — 结果封装
-│   ├── ToolSpec.java                — Tool → Anthropic Tool Schema 转换
 │   ├── registry/
-│   │   └── ToolRegistry.java        — 工具注册表（Spring IoC 收集）
+│   │   └── ToolRegistry.java        — Harness/Agent 可见的工具注册表（收集可用 Tool）
 │   └── impl/
 │       └── BashTool.java            — Bash 工具（Step 1 唯一工具，仅支持 echo）
 │
@@ -88,8 +90,10 @@ ai.cerbur.cimo
 │       └── OpenAiClient.java        — 占位
 │
 └── config
-    ├── CimoProperties.java           — 配置属性（provider、api-key、model、work-dir）
-    └── ToolConfig.java               — 工具安全配置（超时、白名单命令）
+    ├── CimoProperties.java           — Cimo 全局运行配置绑定（provider、work-dir、agent 等）
+    ├── AnthropicProperties.java      — Anthropic provider 专属配置
+    ├── OpenAiProperties.java         — OpenAI provider 专属配置（后续 Step 启用）
+    └── LlmProviderConfig.java        — 根据 provider 暴露对应 Client/Adapter
 ```
 
 ### 关键接口
@@ -195,7 +199,7 @@ public interface Client {
     );
 }
 
-// ClientFactory 使用 Spring AI 管配置、自动配置和 Anthropic 接入
+// ClientFactory 先识别 provider，再通过 Spring AI Anthropic 模型库手动创建选中的 provider client
 // Agent Loop 与 tool_result 协议由 Cimo 自己掌控：
 // Spring AI 不负责内部工具执行，不吞掉 tool_use/tool_result 细节
 @Component
@@ -221,7 +225,13 @@ cimo:
 
 ### System Prompt（Step 1）
 
-Step 1 使用一个很窄的 system prompt，目标是稳定触发 `bash` 工具并避免模型越过当前能力边界：
+Step 1 使用一个很窄的 system prompt，目标是稳定触发 `bash` 工具并避免模型越过当前能力边界。
+
+维护要求：
+
+- 不在 `CliAgentEntry`、`DefaultAgentLoop` 或 `Client` 适配层内联大段 prompt。
+- 新增统一包 `ai.cerbur.cimo.prompt`，Step 1 先放 `CimoPrompts.STEP_1_SYSTEM_PROMPT`。
+- 后续 Step 的 system prompt、工具提示词、多 Agent 提示词都从该包扩展；如果提示词开始需要变量，再演进为模板/工厂方法。
 
 ```text
 You are Cimo, a minimal CLI agent running inside a controlled local harness.
@@ -241,9 +251,14 @@ minimal version only supports echo through bash for now.
 ### Step 1 执行决策
 
 - **消息模型**：使用 block-based `ChatMessage`，一条消息包含 `List<ContentBlock>`，明确支持 `Text`、`ToolUse`、`ToolResult`。
-- **System Prompt**：不把 system prompt 塞进 `ChatMessage`；通过 `ClientRequest.systemPrompt` 显式传入，由 Anthropic adapter 映射到 provider 原生 system 字段。
-- **Anthropic 接入**：用 Spring AI 管配置、自动配置和 Anthropic 接入；Agent Loop、tool 调用、`tool_result` 回传协议由 Cimo 自己掌控。
+- **System Prompt**：不把 system prompt 塞进 `ChatMessage`；通过 `ClientRequest.systemPrompt` 显式传入，由 Anthropic adapter 映射到 provider 原生 system 字段；提示词内容统一由 `ai.cerbur.cimo.prompt` 包维护，入口层只引用。
+- **Anthropic 接入**：使用 Spring AI Anthropic 模型库承接底层 SDK 接入，但不使用 provider starter 自动配置提前创建 client；Agent Loop、tool 调用、`tool_result` 回传协议由 Cimo 自己掌控。
+- **Tool Schema 转换边界**：不保留独立 `ToolSpec` 类。当前工具 schema 只在 provider adapter 暴露给 Spring AI/Anthropic 时使用，应由 `SpringAiAnthropicClient` 内部转换为 `ToolCallback/ToolDefinition`；除非后续出现多个 provider 共享同一套稳定 schema 组装逻辑，否则不提前抽象。决策时间：2026-05-09 15:49 CST，Git Commit: 4c1c015。
+- **Provider 配置边界**：`CimoProperties` 只保存 Cimo 运行层配置，例如 `provider`、`workDir`、`agent`、`tool`；Anthropic、OpenAI 等 LLM 的 `apiKey`、`model`、`baseUrl` 不放在总配置类里聚合。启动时先读取 `cimo.provider`，再由 provider-specific config / factory 选择对应 LLM adapter 和配置对象；`provider=anthropic` 时只绑定 Anthropic 相关配置，后续加入 OpenAI 时不能要求总配置类同时持有 `anthropic` 和 `openai` 字段。
+- **Provider Client 创建边界**：LLM provider 的选择必须发生在 provider client bean 创建之前，而不是启动期先生成所有 provider 再由 `ClientFactory` 选择其一。未被 `cimo.provider` 选中的 provider 不应初始化、不应校验必填配置、不应创建 SDK client 或潜在网络连接。实现上可优先使用 Spring 条件化 Bean（如按 `cimo.provider` 暴露唯一 `Client` / provider adapter），如果 Spring Bean 生命周期让链路变复杂，则完全退回普通工厂模式，在 `createClient()` 中按已识别 provider 手动构造唯一需要的 client。决策时间：2026-05-09 15:55 CST，Git Commit: 4c1c015。
+- **Tool 注册边界**：`config` 包只负责把 `application.yaml` 识别并绑定成 properties bean，不维护工具注册、工具列表或工具装配逻辑。工具注册属于 harness/agent 层面的能力边界：Step 1 可先由 `tool.registry.ToolRegistry` 收集可用 `Tool`，后续若引入独立 Harness 管理层，则把注册/选择/暴露工具的逻辑迁移到 harness 包，再由 agent 层按上下文引用注册结果。`CimoProperties` 最多保留工具运行参数的绑定对象，不承担注册职责；如 `bash` 的超时、白名单等配置继续作为工具运行参数注入到具体 tool 或 tool properties 中。
 - **CLI 形态**：做成类似 Codex / Claude Code 的启动即交互体验：`./gradlew bootRun` 后进入 `>` 提示符，用户直接输入自然语言；底层用 JLine 读取输入并接入 Spring 生命周期，不采用 Spring Shell 的 `ask ...` 命令模式，也不使用裸 `Scanner`。
+- **CLI 模式确认**：当前方向明确使用 CLI/JLine REPL 模式作为 Step 1 入口，不再沿用 Spring Shell 命令模式；文档、依赖和入口实现都应围绕“启动即进入自然语言 REPL”收口。决策时间：2026-05-09 16:00 CST，Git Commit: 未提交。
 - **Bash 安全边界**：Step 1 的白名单只开放 `echo`；更复杂的命令、参数解析、路径隔离、命令注入防护和沙箱策略全部放到后续安全 Step 中迭代。
 - **BashTool 参数结构**：Step 1 不接收整条 shell 字符串，只接收结构化参数，例如 `{ "command": "echo", "args": ["hello"] }`，执行时由 `BashTool` 组装为受控的 `echo` 调用。
 - **AgentState 命名**：统一使用 `INITIALIZING / RUNNING / WAITING_FOR_TOOL / COMPLETED / ERROR / SHUTDOWN`。
@@ -349,23 +364,30 @@ $ ./gradlew bootRun
 
 ### Step 1 检查清单
 
-- [ ] 所有包和接口定义完毕
-- [ ] 明确 Anthropic 集成方式：Spring AI 管配置和接入，Cimo 自己掌控 Agent Loop 与 tool_result 协议
-- [ ] CliAgentEntry（JLine 交互式 REPL + 事件输出）
-- [ ] AgentEvent 模型（sealed class）
-- [ ] AgentState 枚举定义（INITIALIZING / RUNNING / WAITING_FOR_TOOL / COMPLETED / ERROR / SHUTDOWN）
-- [ ] ChatMessage 改为 block-based 模型（Text / ToolUse / ToolResult）
-- [ ] System prompt 通过 ClientRequest 显式传入
-- [ ] SpringAiAnthropicClient 流式调用 + tool_use 响应解析
-- [ ] StreamEvent 支持 text_delta / tool_use_start / tool_input_delta / message_stop 等最小事件
-- [ ] tool_use_id 在消息历史中保存，并用于后续 tool_result 回传
-- [ ] BashTool（安全限制：超时 + 白名单仅 echo）
-- [ ] ToolRegistry（Spring 自动收集 Tool Bean）
-- [ ] ToolSpec（Tool → Anthropic Tool Schema 转换）
-- [ ] DefaultAgentLoop（完整 Loop 编排）
-- [ ] MessageHistory（内存消息历史管理 + 超长裁剪）
-- [ ] application.yaml 配置
-- [ ] 端到端验证：`通过bash输出hello` 走通
+- [x] S1-01 所有包和接口定义完毕
+- [x] S1-02 明确 Anthropic 集成方式：Spring AI 管依赖和配置入口，Cimo 自己掌控 Agent Loop 与 tool_result 协议
+- [x] S1-03 CliAgentEntry（JLine 交互式 REPL + 事件输出）
+- [x] S1-04 AgentEvent 模型（sealed class）
+- [x] S1-05 AgentState 枚举定义（INITIALIZING / RUNNING / WAITING_FOR_TOOL / COMPLETED / ERROR / SHUTDOWN）
+- [x] S1-06 ChatMessage 改为 block-based 模型（Text / ToolUse / ToolResult）
+- [x] S1-07 System prompt 通过 ClientRequest 显式传入
+- [x] S1-08 SpringAiAnthropicClient 流式调用 + tool_use 响应解析
+- [x] S1-09 StreamEvent 支持 text_delta / tool_use_start / tool_input_delta / message_stop 等最小事件
+- [x] S1-10 tool_use_id 在消息历史中保存，并用于后续 tool_result 回传
+- [x] S1-11 BashTool（安全限制：超时 + 白名单仅 echo）
+- [x] S1-12 ToolRegistry（Spring 自动收集 Tool Bean）
+- [x] S1-13 删除无引用的 `ToolSpec`：按第一性原理和奥卡姆剃刀，当前 schema 转换职责属于 provider adapter；`ToolSpec` 无独立职责且没有代码引用，进入编码阶段后删除文件（完成时间：2026-05-09 16:09 CST，Git Commit: 未提交）
+- [x] S1-14 DefaultAgentLoop（完整 Loop 编排）
+- [x] S1-15 MessageHistory（内存消息历史管理 + 超长裁剪）
+- [x] S1-16 application.yaml 配置
+- [x] S1-17 提示词集中维护：新增 `ai.cerbur.cimo.prompt` 包，并将 `CliAgentEntry` 内联 Step 1 system prompt 迁移到 `CimoPrompts.STEP_1_SYSTEM_PROMPT`（2026-05-09 12:54 CST，Git Commit: 未提交）
+- [x] S1-18 配置边界重构：`CimoProperties` 移除 provider-specific 字段，新增 `AnthropicProperties` / `OpenAiProperties`，`ClientFactory` 根据 `cimo.provider` 选择 adapter，Spring AI Anthropic 配置引用 `cimo.anthropic` 作为入口（2026-05-09 15:33 CST，Git Commit: 未提交）
+- [x] S1-19 Tool 注册边界重构：`config` 包只保留 `application.yaml` → properties bean 的绑定职责，移除/避免 `ToolConfig` 这类在 config 中维护工具注册或装配的逻辑；工具注册放到 `tool.registry` / agent-harness 边界，后续 Harness 独立包出现后迁移到 harness 层再供 agent 引用（完成时间：2026-05-09 16:09 CST，Git Commit: 未提交）
+- [x] S1-20 Provider Client 懒创建边界重构：`ClientFactory` / provider 配置链路必须先识别 `cimo.provider`，再只创建被选中的 provider client；未来加入 OpenAI 时不能在 Spring bean 创建阶段同时初始化 Anthropic/OpenAI 等所有 provider。若条件化 Bean 不自然，则采用普通工厂模式手动构造唯一 client（完成时间：2026-05-09 16:09 CST，Git Commit: 未提交）
+- [ ] S1-21 端到端验证：`通过bash输出hello` 走通（代码已完成，等待配置真实 `ANTHROPIC_API_KEY` 后验证）
+- [x] S1-22 编译与上下文验证：`./gradlew test` 通过（2026-05-09 12:41 CST，Git Commit: 未提交）
+- [x] S1-23 CLI 启动烟测：`printf 'exit\n' | ./gradlew bootRun` 通过（2026-05-09 12:41 CST，Git Commit: 未提交）
+- [x] S1-24 CLI 模式文档收口：`AGENTS.md`、`README.md`、`plan.md` 统一当前方向为 JLine CLI REPL，移除/标注 Spring Shell 命令模式的旧表述；后续代码和依赖再按该方向清理（2026-05-09 16:00 CST，Git Commit: 未提交）
 
 ---
 
@@ -386,12 +408,23 @@ $ ./gradlew bootRun
 
 | 完成时间 | Plan | Git Commit |
 |---------|------|------------|
-| - | - | - |
+| 2026-05-09 12:32 CST | Step 1 coding 完成；真实 Anthropic 端到端验证待配置 `ANTHROPIC_API_KEY` 后执行 | 未提交 |
+| 2026-05-09 12:54 CST | Step 1 提示词集中维护：迁移 CLI 内联 system prompt 到 `ai.cerbur.cimo.prompt.CimoPrompts` | 未提交 |
+| 2026-05-09 15:33 CST | 配置边界重构：拆分 Cimo 全局配置与 LLM provider 专属配置，`ClientFactory` 根据 `cimo.provider` 选择 adapter，Spring AI Anthropic 配置改为引用 `cimo.anthropic` | 未提交 |
+| 2026-05-09 16:00 CST | CLI 模式文档收口：`AGENTS.md`、`README.md`、`plan.md` 统一当前方向为 JLine CLI REPL，后续代码和依赖按该方向清理 | 未提交 |
+| 2026-05-09 16:09 CST | S1-13 / S1-19 / S1-20：删除无职责 `ToolSpec`；移除 config 层工具装配；改为手动按选中 provider 创建 Anthropic client，避免 Spring AI provider 自动配置提前初始化 | 未提交 |
 
 ## 决策记录
 
 | 时间 | 决策 | Git Commit |
 |------|------|------------|
 | 2026-05-09 03:35 CST | Step 1 可以进入执行前准备；开工前补充 Spring AI Anthropic 集成方式、AgentState、StreamEvent、tool_use_id 四个细节。 | b39d7ef |
-| 2026-05-09 12:15 CST | Step 1 执行决策：ChatMessage 使用 block-based 模型；Spring AI 负责配置和 Anthropic 接入，Cimo 自己掌控 Agent Loop 与 tool_result 协议；CLI 使用 Spring Shell；BashTool 先采用白名单命令；AgentState 命名统一为大写枚举。 | f1704a0 |
+| 2026-05-09 12:15 CST | Step 1 执行决策：ChatMessage 使用 block-based 模型；Spring AI 负责配置和 Anthropic 接入，Cimo 自己掌控 Agent Loop 与 tool_result 协议；当时 CLI 考虑使用 Spring Shell，后续已被 12:23 和 16:00 决策修正为 JLine REPL；BashTool 先采用白名单命令；AgentState 命名统一为大写枚举。 | f1704a0 |
 | 2026-05-09 12:23 CST | Step 1 进一步收窄：BashTool 白名单仅支持 echo；system prompt 通过 ClientRequest 独立传入；CLI 采用类似 Codex / Claude Code 的 JLine 交互式 REPL，而不是 Spring Shell 命令模式。 | 未提交 |
+| 2026-05-09 12:41 CST | 修正 Anthropic 接入：`SpringAiAnthropicClient` 必须基于 Spring AI `AnthropicChatModel`，由 `spring-ai-anthropic` 维护底层 Anthropic client；Cimo 仅负责消息模型适配和外部工具执行。 | 未提交 |
+| 2026-05-09 12:46 CST | 提示词统一抽象到 `ai.cerbur.cimo.prompt` 包维护；入口层、Agent Loop、Client adapter 不再内联大段 prompt，只引用统一包暴露的常量、模板或工厂方法。 | 4c1c015 |
+| 2026-05-09 15:28 CST | 修正配置边界：`CimoProperties` 只承载 Cimo 全局运行配置；Anthropic、OpenAI 等 provider 的 apiKey/model/baseUrl 拆到独立 provider properties/config。启动时先根据 `cimo.provider` 选择 LLM adapter，再绑定/使用对应 provider 配置，避免总配置类聚合多个 LLM provider。 | 4c1c015 |
+| 2026-05-09 15:40 CST | 修正 Tool 注册边界：`config` 包只做 `application.yaml` 到 properties bean 的识别和绑定，不维护工具注册、工具列表或工具装配；工具注册属于 harness/agent 能力边界，先保留在 `tool.registry`，后续 Harness 独立包出现后迁移到 harness 层再供 agent 引用。 | 未提交 |
+| 2026-05-09 15:49 CST | `ToolSpec` 无代码引用，且只是 Anthropic schema 的薄转换层；当前转换职责应留在 provider adapter 内部。按第一性原理和奥卡姆剃刀，不保留没有独立职责和当前收益的抽象，进入编码阶段后删除该文件。 | 4c1c015 |
+| 2026-05-09 15:55 CST | 修正 Provider Client 创建边界：不能在 Spring bean 创建阶段初始化所有 LLM provider 再由 `ClientFactory` 选择其一；必须先识别 `cimo.provider`，再只创建被选中的 provider client。若条件化 Bean 让生命周期复杂化，则退回普通工厂模式以保持最小设计。 | 4c1c015 |
+| 2026-05-09 16:00 CST | 确认入口方向使用 CLI/JLine REPL 模式：`./gradlew bootRun` 后直接进入自然语言交互提示符，不采用 Spring Shell 命令模式；README、AGENTS、plan 先统一该方向，后续代码和依赖按此收口。 | 未提交 |
