@@ -15,7 +15,7 @@
 - 当前阶段：Step 1 - CLI Agent Loop + Anthropic + BashTool
 - 当前详细计划：[plan_step1.md](plan_step1.md)
 - 计划目录化完成时间：2026-05-09 16:30 CST
-- 对应 Git Commit：f372db6
+- 对应 Git Commit：5e6875f
 
 ---
 

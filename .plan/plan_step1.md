@@ -419,7 +419,7 @@ $ ./gradlew bootRun
 | 2026-05-09 16:00 CST | CLI 模式文档收口：`AGENTS.md`、`README.md`、`plan.md` 统一当前方向为 JLine CLI REPL，后续代码和依赖按该方向清理 | 未提交 |
 | 2026-05-09 16:09 CST | S1-13 / S1-19 / S1-20：删除无职责 `ToolSpec`；移除 config 层工具装配；改为手动按选中 provider 创建 Anthropic client，避免 Spring AI provider 自动配置提前初始化 | 未提交 |
 | 2026-05-09 16:24 CST | S1-21 / S1-22 决策：`CimoProperties` 无独立职责，计划删除；`maxToolRounds` 从 `application.yaml` 注入 Agent/Context 构建链路；Bash 命令白名单固定在 `BashTool` 实现和 schema，不作为 YAML 配置 | 30a7095 |
-| 2026-05-09 16:30 CST | Plan 文件收口：根目录 `plan.md` 迁移为 `.plan/plan_step1.md`，新增 `.plan/plan_main.md` 作为总入口 | f372db6 |
+| 2026-05-09 16:30 CST | Plan 文件收口：根目录 `plan.md` 迁移为 `.plan/plan_step1.md`，新增 `.plan/plan_main.md` 作为总入口 | 5e6875f |
 
 ## 决策记录
 
@@ -436,4 +436,4 @@ $ ./gradlew bootRun
 | 2026-05-09 15:55 CST | 修正 Provider Client 创建边界：不能在 Spring bean 创建阶段初始化所有 LLM provider 再由 `ClientFactory` 选择其一；必须先识别 `cimo.provider`，再只创建被选中的 provider client。若条件化 Bean 让生命周期复杂化，则退回普通工厂模式以保持最小设计。 | 4c1c015 |
 | 2026-05-09 16:00 CST | 确认入口方向使用 CLI/JLine REPL 模式：`./gradlew bootRun` 后直接进入自然语言交互提示符，不采用 Spring Shell 命令模式；README、AGENTS、plan 先统一该方向，后续代码和依赖按此收口。 | 未提交 |
 | 2026-05-09 16:24 CST | 修正运行配置边界：`CimoProperties` 当前只是把 provider/work-dir/agent/tool 临时聚合，没有独立职责和可验证收益，应删除；各配置改由真正使用它们的组件读取。`maxToolRounds` 从 `application.yaml` 注入 Agent/Context 构建链路；Bash 的命令白名单属于 `BashTool` 能力定义，不进入 YAML 或总配置类。 | 30a7095 |
-| 2026-05-09 16:30 CST | 计划文件统一收口到 `.plan/`：`plan_main.md` 作为总入口，`plan_step1.md` 承载当前 Step 1 详细计划；根目录不再维护 `plan.md`。 | f372db6 |
+| 2026-05-09 16:30 CST | 计划文件统一收口到 `.plan/`：`plan_main.md` 作为总入口，`plan_step1.md` 承载当前 Step 1 详细计划；根目录不再维护 `plan.md`。 | 5e6875f |
