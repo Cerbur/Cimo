@@ -13,5 +13,3 @@ cimo:
   tool:
     bash:
       timeout-seconds: 30
-      allowed-commands:
-        - echo

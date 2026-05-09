@@ -4,38 +4,37 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.springframework.ai.anthropic.AnthropicChatModel;
 import org.springframework.ai.anthropic.AnthropicChatOptions;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import ai.cerbur.cimo.client.anthropic.SpringAiAnthropicClient;
 import ai.cerbur.cimo.client.openai.OpenAiClient;
 import ai.cerbur.cimo.config.AnthropicProperties;
-import ai.cerbur.cimo.config.CimoProperties;
 
 @Component
 public class ClientFactory {
 
-    private final CimoProperties properties;
+    private final String provider;
     private final AnthropicProperties anthropicProperties;
     private final ObjectMapper objectMapper;
 
     public ClientFactory(
-            CimoProperties properties,
+            @Value("${cimo.provider:anthropic}") String provider,
             AnthropicProperties anthropicProperties,
             ObjectMapper objectMapper) {
-        this.properties = properties;
+        this.provider = normalizeProvider(provider);
         this.anthropicProperties = anthropicProperties;
         this.objectMapper = objectMapper;
     }
 
     public Client createClient() {
-        String provider = properties.provider().trim().toLowerCase();
         if ("anthropic".equals(provider)) {
             return new SpringAiAnthropicClient(createAnthropicChatModel(), objectMapper);
         }
         if ("openai".equals(provider)) {
             return new OpenAiClient();
         }
-        throw new IllegalArgumentException("Unsupported provider: " + properties.provider());
+        throw new IllegalArgumentException("Unsupported provider: " + provider);
     }
 
     private AnthropicChatModel createAnthropicChatModel() {
@@ -50,5 +49,12 @@ public class ClientFactory {
         return AnthropicChatModel.builder()
                 .options(options.build())
                 .build();
+    }
+
+    private static String normalizeProvider(String provider) {
+        if (provider == null || provider.isBlank()) {
+            return "anthropic";
+        }
+        return provider.trim().toLowerCase();
     }
 }

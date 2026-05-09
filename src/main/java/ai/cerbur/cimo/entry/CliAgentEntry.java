@@ -11,11 +11,11 @@ import org.jline.terminal.TerminalBuilder;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import ai.cerbur.cimo.agent.AgentContext;
 import ai.cerbur.cimo.agent.AgentLoop;
-import ai.cerbur.cimo.config.CimoProperties;
 import ai.cerbur.cimo.entry.event.AgentEvent;
 import ai.cerbur.cimo.entry.event.AgentEventHandler;
 import ai.cerbur.cimo.prompt.CimoPrompts;
@@ -26,12 +26,18 @@ import ai.cerbur.cimo.tool.registry.ToolRegistry;
 public class CliAgentEntry implements AgentEntry, ApplicationRunner, AgentEventHandler {
 
     private final AgentLoop agentLoop;
-    private final CimoProperties properties;
+    private final String workDir;
+    private final int maxToolRounds;
     private final ToolRegistry toolRegistry;
 
-    public CliAgentEntry(AgentLoop agentLoop, CimoProperties properties, ToolRegistry toolRegistry) {
+    public CliAgentEntry(
+            AgentLoop agentLoop,
+            @Value("${cimo.work-dir:${user.dir}}") String workDir,
+            @Value("${cimo.agent.max-tool-rounds:5}") int maxToolRounds,
+            ToolRegistry toolRegistry) {
         this.agentLoop = agentLoop;
-        this.properties = properties;
+        this.workDir = normalizeWorkDir(workDir);
+        this.maxToolRounds = normalizeMaxToolRounds(maxToolRounds);
         this.toolRegistry = toolRegistry;
     }
 
@@ -43,10 +49,10 @@ public class CliAgentEntry implements AgentEntry, ApplicationRunner, AgentEventH
     @Override
     public void start() {
         agentLoop.start(new AgentContext(
-                properties.workDir(),
+                workDir,
                 CimoPrompts.STEP_1_SYSTEM_PROMPT,
                 toolRegistry,
-                properties.agent().maxToolRounds()), this);
+                maxToolRounds), this);
         printBanner();
         try (Terminal terminal = TerminalBuilder.builder().system(true).build()) {
             LineReader reader = LineReaderBuilder.builder().terminal(terminal).build();
@@ -109,5 +115,16 @@ public class CliAgentEntry implements AgentEntry, ApplicationRunner, AgentEventH
                   Cimo Agent
                   Type 'exit' to quit
                 """);
+    }
+
+    private static String normalizeWorkDir(String workDir) {
+        if (workDir == null || workDir.isBlank()) {
+            return System.getProperty("user.dir");
+        }
+        return workDir;
+    }
+
+    private static int normalizeMaxToolRounds(int maxToolRounds) {
+        return maxToolRounds <= 0 ? 5 : maxToolRounds;
     }
 }

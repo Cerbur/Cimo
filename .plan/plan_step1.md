@@ -387,8 +387,8 @@ $ ./gradlew bootRun
 - [x] S1-18 配置边界重构：`CimoProperties` 移除 provider-specific 字段，新增 `AnthropicProperties` / `OpenAiProperties`，`ClientFactory` 根据 `cimo.provider` 选择 adapter，Spring AI Anthropic 配置引用 `cimo.anthropic` 作为入口（2026-05-09 15:33 CST，Git Commit: 未提交）
 - [x] S1-19 Tool 注册边界重构：`config` 包只保留 `application.yaml` → properties bean 的绑定职责，移除/避免 `ToolConfig` 这类在 config 中维护工具注册或装配的逻辑；工具注册放到 `tool.registry` / agent-harness 边界，后续 Harness 独立包出现后迁移到 harness 层再供 agent 引用（完成时间：2026-05-09 16:09 CST，Git Commit: 未提交）
 - [x] S1-20 Provider Client 懒创建边界重构：`ClientFactory` / provider 配置链路必须先识别 `cimo.provider`，再只创建被选中的 provider client；未来加入 OpenAI 时不能在 Spring bean 创建阶段同时初始化 Anthropic/OpenAI 等所有 provider。若条件化 Bean 不自然，则采用普通工厂模式手动构造唯一 client（完成时间：2026-05-09 16:09 CST，Git Commit: 未提交）
-- [ ] S1-21 配置边界再次收口：删除无独立职责的 `CimoProperties`；`cimo.provider` 贴近 provider 选择逻辑读取，`cimo.work-dir` 贴近 `AgentContext` 构建读取，`cimo.agent.max-tool-rounds` 从 `application.yaml` 注入 Agent/Context 构建链路；`BashTool` 只读取自身运行参数（如 timeout），不从总配置读取命令白名单（决策时间：2026-05-09 16:24 CST，Git Commit: 30a7095）。
-- [ ] S1-22 BashTool 能力配置收口：从 `application.yaml` 移除 `cimo.tool.bash.allowed-commands`；Step 1 的 echo 白名单固定在 `BashTool` 实现和 schema 中，后续扩展命令必须通过代码和测试显式演进（决策时间：2026-05-09 16:24 CST，Git Commit: 30a7095）。
+- [x] S1-21 配置边界再次收口：删除无独立职责的 `CimoProperties`；`cimo.provider` 贴近 provider 选择逻辑读取，`cimo.work-dir` 贴近 `AgentContext` 构建读取，`cimo.agent.max-tool-rounds` 从 `application.yaml` 注入 Agent/Context 构建链路；`BashTool` 只读取自身运行参数（如 timeout），不从总配置读取命令白名单（完成时间：2026-05-09 16:38 CST，Git Commit: 未提交）。
+- [x] S1-22 BashTool 能力配置收口：从 `application.yaml` 移除 `cimo.tool.bash.allowed-commands`；Step 1 的 echo 白名单固定在 `BashTool` 实现和 schema 中，后续扩展命令必须通过代码和测试显式演进（完成时间：2026-05-09 16:38 CST，Git Commit: 未提交）。
 - [ ] S1-23 端到端验证：`通过bash输出hello` 走通（代码已完成，等待配置真实 `ANTHROPIC_API_KEY` 后验证）
 - [x] S1-24 编译与上下文验证：`./gradlew test` 通过（2026-05-09 12:41 CST，Git Commit: 未提交）
 - [x] S1-25 CLI 启动烟测：`printf 'exit\n' | ./gradlew bootRun` 通过（2026-05-09 12:41 CST，Git Commit: 未提交）
@@ -420,6 +420,7 @@ $ ./gradlew bootRun
 | 2026-05-09 16:09 CST | S1-13 / S1-19 / S1-20：删除无职责 `ToolSpec`；移除 config 层工具装配；改为手动按选中 provider 创建 Anthropic client，避免 Spring AI provider 自动配置提前初始化 | 未提交 |
 | 2026-05-09 16:24 CST | S1-21 / S1-22 决策：`CimoProperties` 无独立职责，计划删除；`maxToolRounds` 从 `application.yaml` 注入 Agent/Context 构建链路；Bash 命令白名单固定在 `BashTool` 实现和 schema，不作为 YAML 配置 | 30a7095 |
 | 2026-05-09 16:30 CST | Plan 文件收口：根目录 `plan.md` 迁移为 `.plan/plan_step1.md`，新增 `.plan/plan_main.md` 作为总入口 | 5e6875f |
+| 2026-05-09 16:38 CST | S1-21 / S1-22：删除无独立职责的 `CimoProperties`；provider/work-dir/max-tool-rounds 改为贴近使用点注入；BashTool 只保留 timeout 配置，echo 白名单固定在实现和 schema，并补充边界测试 | 未提交 |
 
 ## 决策记录
 

@@ -11,20 +11,22 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import ai.cerbur.cimo.config.CimoProperties;
 import ai.cerbur.cimo.tool.Tool;
 import ai.cerbur.cimo.tool.ToolResult;
 
 @Component
 public class BashTool implements Tool {
 
-    private final CimoProperties.Bash properties;
+    private static final String ALLOWED_COMMAND = "echo";
+
+    private final int timeoutSeconds;
     private final ObjectNode schema;
 
-    public BashTool(CimoProperties properties) {
-        this.properties = properties.tool().bash();
+    public BashTool(@Value("${cimo.tool.bash.timeout-seconds:30}") int timeoutSeconds) {
+        this.timeoutSeconds = normalizeTimeoutSeconds(timeoutSeconds);
         this.schema = buildSchema();
     }
 
@@ -46,15 +48,12 @@ public class BashTool implements Tool {
     @Override
     public ToolResult execute(JsonNode arguments) {
         String command = arguments.path("command").asText("");
-        if (!properties.allowedCommands().contains(command)) {
+        if (!ALLOWED_COMMAND.equals(command)) {
             return new ToolResult(false, "", "Command is not allowed: " + command, null);
-        }
-        if (!"echo".equals(command)) {
-            return new ToolResult(false, "", "Step 1 only supports echo.", null);
         }
 
         List<String> processCommand = new ArrayList<>();
-        processCommand.add("echo");
+        processCommand.add(ALLOWED_COMMAND);
         JsonNode args = arguments.path("args");
         if (args.isArray()) {
             args.forEach(arg -> processCommand.add(arg.asText()));
@@ -63,7 +62,7 @@ public class BashTool implements Tool {
         ProcessBuilder processBuilder = new ProcessBuilder(processCommand);
         try {
             Process process = processBuilder.start();
-            boolean completed = process.waitFor(properties.timeoutSeconds(), TimeUnit.SECONDS);
+            boolean completed = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
             if (!completed) {
                 process.destroyForcibly();
                 return new ToolResult(false, "", "Command timed out.", null);
@@ -91,7 +90,7 @@ public class BashTool implements Tool {
         ObjectNode command = objectMapper.createObjectNode();
         command.put("type", "string");
         ArrayNode commandEnum = objectMapper.createArrayNode();
-        commandEnum.add("echo");
+        commandEnum.add(ALLOWED_COMMAND);
         command.set("enum", commandEnum);
         command.put("description", "The command to run. Step 1 only allows echo.");
         propertiesNode.set("command", command);
@@ -111,5 +110,9 @@ public class BashTool implements Tool {
         root.set("required", required);
         root.put("additionalProperties", false);
         return root;
+    }
+
+    private static int normalizeTimeoutSeconds(int timeoutSeconds) {
+        return timeoutSeconds <= 0 ? 30 : timeoutSeconds;
     }
 }
