@@ -401,10 +401,10 @@ $ ./gradlew bootRun
 - [x] S1-24 编译与上下文验证：`./gradlew test` 通过（2026-05-09 12:41 CST，Git Commit: 未提交）
 - [x] S1-25 CLI 启动烟测：`printf 'exit\n' | ./gradlew bootRun` 通过（2026-05-09 12:41 CST，Git Commit: 未提交）
 - [x] S1-26 CLI 模式文档收口：`AGENTS.md`、`README.md`、`plan.md` 统一当前方向为 JLine CLI REPL，移除/标注 Spring Shell 命令模式的旧表述；后续代码和依赖再按该方向清理（2026-05-09 16:00 CST，Git Commit: 未提交）
-- [x] S1-27 Anthropic baseUrl 配置契约收口：`AnthropicProperties.baseUrl` 只从配置读取，不在 properties 构造器中设置默认值；`application.yaml` 暴露 `cimo.anthropic.base-url` / `ANTHROPIC_BASE_URL` 入口，默认是否为空由启动校验负责解释（完成时间：2026-05-10 03:00 CST，Git Commit: 未提交）。
-- [x] S1-28 Anthropic 启动期必要值校验：当 `cimo.provider=anthropic` 时，`ClientFactory.createAnthropicChatModel()` 在构建 Spring AI `AnthropicChatModel` 前校验 `apiKey`、`model`、`baseUrl`；失败时抛出明确异常并中止应用启动（完成时间：2026-05-10 03:00 CST，Git Commit: 未提交）。
-- [x] S1-29 AnthropicProperties 按需加载验证：尝试让 `AnthropicProperties` 仅在 Anthropic provider 链路需要时加载；若生命周期成本高，则至少保证未选中 Anthropic provider 时不触发 Anthropic 必填校验、不创建 Anthropic SDK client（完成时间：2026-05-10 03:00 CST，Git Commit: 未提交）。
-- [x] S1-30 配置失败测试补充：新增/调整测试覆盖 `provider=anthropic` 缺少 `apiKey/model/baseUrl` 时启动或 client 创建失败、`baseUrl` 非 HTTP/HTTPS URL 时失败，以及非 Anthropic provider 不因 Anthropic 配置缺失而失败（完成时间：2026-05-10 03:00 CST，Git Commit: 未提交）。
+- [x] S1-27 Anthropic baseUrl 配置契约收口：`AnthropicProperties.baseUrl` 只从配置读取，不在 properties 构造器中设置默认值；`application.yaml` 暴露 `cimo.anthropic.base-url` / `ANTHROPIC_BASE_URL` 入口，默认是否为空由启动校验负责解释（完成时间：2026-05-10 03:00 CST，Git Commit: 0c5f34d）。
+- [x] S1-28 Anthropic 启动期必要值校验：当 `cimo.provider=anthropic` 时，`ClientFactory.createAnthropicChatModel()` 在构建 Spring AI `AnthropicChatModel` 前校验 `apiKey`、`model`、`baseUrl`；失败时抛出明确异常并中止应用启动（完成时间：2026-05-10 03:00 CST，Git Commit: 0c5f34d）。
+- [x] S1-29 AnthropicProperties 按需加载验证：尝试让 `AnthropicProperties` 仅在 Anthropic provider 链路需要时加载；若生命周期成本高，则至少保证未选中 Anthropic provider 时不触发 Anthropic 必填校验、不创建 Anthropic SDK client（完成时间：2026-05-10 03:00 CST，Git Commit: 0c5f34d）。
+- [x] S1-30 配置失败测试补充：新增/调整测试覆盖 `provider=anthropic` 缺少 `apiKey/model/baseUrl` 时启动或 client 创建失败、`baseUrl` 非 HTTP/HTTPS URL 时失败，以及非 Anthropic provider 不因 Anthropic 配置缺失而失败（完成时间：2026-05-10 03:00 CST，Git Commit: 0c5f34d）。
 - [x] S1-31 Context 上限不在 Step 1 做：`MessageHistory` 去掉 `maxMessages` 和 `trim()`，简化为纯追加；后续加压缩逻辑时整块重构（完成时间：2026-05-10 12:30 CST，Git Commit: 未提交）
 - [ ] S1-32 收口无消费者的状态事件：`DefaultAgentLoop` 当前发出 `AgentEvent.StatusChange(AgentState.WAITING_FOR_TOOL / COMPLETED / ERROR / SHUTDOWN)`，但 CLI 入口直接忽略 `StatusChange`，Step 1 没有 UI/API/Session/Harness 等真实消费者。按第一性原理，状态模型暂时没有可观察收益；后续编码阶段应删除或暂停扩展 `AgentState` / `StatusChange`，保留 `ToolCall`、`ToolResult`、`Response`、`Error` 等有真实输出价值的事件。等 Step 3 Session 或 Step 4 Harness/API 出现状态消费者时再重新引入。
 - [x] S1-33 Anthropic 输出 token 上限配置化：`SpringAiAnthropicClient` 中 `AnthropicChatOptions.maxTokens` 改为从 Anthropic provider 配置读取，`application.yaml` 提供 `cimo.anthropic.max-tokens: 4096`。该参数只限制单次模型输出长度，不代表上下文窗口；默认 4096 更适合作为 CLI Agent 的基础输出预算（完成时间：2026-05-10 02:52 CST，Git Commit: 未提交）。
@@ -439,7 +439,7 @@ $ ./gradlew bootRun
 | 2026-05-09 16:38 CST | S1-21 / S1-22：删除无独立职责的 `CimoProperties`；provider/work-dir/max-tool-rounds 改为贴近使用点注入；BashTool 只保留 timeout 配置，echo 白名单固定在实现和 schema，并补充边界测试 | 7e8c984 |
 | 2026-05-10 12:30 CST | S1-31 Context 上限不在 Step 1 做：按奥卡姆剃刀原则，`MessageHistory` 改为纯追加模式，去掉 `maxMessages` 和 `trim()`；后续加压缩逻辑时整块重构 | 未提交 |
 | 2026-05-10 02:52 CST | S1-33 Anthropic 输出 token 上限配置化：`SpringAiAnthropicClient` 从 `cimo.anthropic.max-tokens` 读取单次输出预算，默认 4096，不再硬编码 1024 | 未提交 |
-| 2026-05-10 03:00 CST | S1-27 / S1-28 / S1-29 / S1-30：Anthropic `baseUrl` 不再由 properties 构造器兜底；`ClientFactory` 在 Anthropic client 创建前集中校验 `apiKey/model/baseUrl`；非 Anthropic provider 不触发 Anthropic 校验；补充配置失败测试 | 未提交 |
+| 2026-05-10 03:00 CST | S1-27 / S1-28 / S1-29 / S1-30：Anthropic `baseUrl` 不再由 properties 构造器兜底；`ClientFactory` 在 Anthropic client 创建前集中校验 `apiKey/model/baseUrl`；非 Anthropic provider 不触发 Anthropic 校验；补充配置失败测试 | 0c5f34d |
 
 ## 决策记录
 
