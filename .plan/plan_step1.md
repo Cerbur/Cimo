@@ -1,6 +1,6 @@
-# Cimo Plan
+# Cimo Step 1 Plan
 
-> 从零构建一个 Agent Harness 工具。每个 Step 做最小的事，逐步演进。
+> Step 1 详细计划：CLI Agent Loop + Anthropic + BashTool。全局计划入口见 [plan_main.md](plan_main.md)。
 
 ---
 
@@ -90,11 +90,11 @@ ai.cerbur.cimo
 │       └── OpenAiClient.java        — 占位
 │
 └── config
-    ├── CimoProperties.java           — Cimo 全局运行配置绑定（provider、work-dir、agent 等）
     ├── AnthropicProperties.java      — Anthropic provider 专属配置
-    ├── OpenAiProperties.java         — OpenAI provider 专属配置（后续 Step 启用）
-    └── LlmProviderConfig.java        — 根据 provider 暴露对应 Client/Adapter
+    └── OpenAiProperties.java         — OpenAI provider 专属配置（后续 Step 启用）
 ```
+
+> 2026-05-09 修正：`CimoProperties` 当前没有独立职责，倾向删除。`cimo.provider`、`cimo.work-dir`、`cimo.agent.max-tool-rounds` 这些少量运行参数优先由真正使用它们的组件通过 `@Value` 或更窄的 properties 绑定读取；只有当多个组件共享同一组稳定配置且能证明聚合收益时，才重新引入全局 properties。
 
 ### 关键接口
 
@@ -217,10 +217,11 @@ cimo:
   anthropic:
     api-key: ${ANTHROPIC_API_KEY:}
     model: claude-sonnet-4-20250514
+  agent:
+    max-tool-rounds: 5
   tool:
     bash:
       timeout-seconds: 30
-      allowed-commands: echo
 ```
 
 ### System Prompt（Step 1）
@@ -254,9 +255,11 @@ minimal version only supports echo through bash for now.
 - **System Prompt**：不把 system prompt 塞进 `ChatMessage`；通过 `ClientRequest.systemPrompt` 显式传入，由 Anthropic adapter 映射到 provider 原生 system 字段；提示词内容统一由 `ai.cerbur.cimo.prompt` 包维护，入口层只引用。
 - **Anthropic 接入**：使用 Spring AI Anthropic 模型库承接底层 SDK 接入，但不使用 provider starter 自动配置提前创建 client；Agent Loop、tool 调用、`tool_result` 回传协议由 Cimo 自己掌控。
 - **Tool Schema 转换边界**：不保留独立 `ToolSpec` 类。当前工具 schema 只在 provider adapter 暴露给 Spring AI/Anthropic 时使用，应由 `SpringAiAnthropicClient` 内部转换为 `ToolCallback/ToolDefinition`；除非后续出现多个 provider 共享同一套稳定 schema 组装逻辑，否则不提前抽象。决策时间：2026-05-09 15:49 CST，Git Commit: 4c1c015。
-- **Provider 配置边界**：`CimoProperties` 只保存 Cimo 运行层配置，例如 `provider`、`workDir`、`agent`、`tool`；Anthropic、OpenAI 等 LLM 的 `apiKey`、`model`、`baseUrl` 不放在总配置类里聚合。启动时先读取 `cimo.provider`，再由 provider-specific config / factory 选择对应 LLM adapter 和配置对象；`provider=anthropic` 时只绑定 Anthropic 相关配置，后续加入 OpenAI 时不能要求总配置类同时持有 `anthropic` 和 `openai` 字段。
+- **Provider 配置边界**：Anthropic、OpenAI 等 LLM 的 `apiKey`、`model`、`baseUrl` 不放在总配置类里聚合。启动时先读取 `cimo.provider`，再由 provider-specific config / factory 选择对应 LLM adapter 和配置对象；`provider=anthropic` 时只绑定 Anthropic 相关配置，后续加入 OpenAI 时不能要求总配置类同时持有 `anthropic` 和 `openai` 字段。
 - **Provider Client 创建边界**：LLM provider 的选择必须发生在 provider client bean 创建之前，而不是启动期先生成所有 provider 再由 `ClientFactory` 选择其一。未被 `cimo.provider` 选中的 provider 不应初始化、不应校验必填配置、不应创建 SDK client 或潜在网络连接。实现上可优先使用 Spring 条件化 Bean（如按 `cimo.provider` 暴露唯一 `Client` / provider adapter），如果 Spring Bean 生命周期让链路变复杂，则完全退回普通工厂模式，在 `createClient()` 中按已识别 provider 手动构造唯一需要的 client。决策时间：2026-05-09 15:55 CST，Git Commit: 4c1c015。
-- **Tool 注册边界**：`config` 包只负责把 `application.yaml` 识别并绑定成 properties bean，不维护工具注册、工具列表或工具装配逻辑。工具注册属于 harness/agent 层面的能力边界：Step 1 可先由 `tool.registry.ToolRegistry` 收集可用 `Tool`，后续若引入独立 Harness 管理层，则把注册/选择/暴露工具的逻辑迁移到 harness 包，再由 agent 层按上下文引用注册结果。`CimoProperties` 最多保留工具运行参数的绑定对象，不承担注册职责；如 `bash` 的超时、白名单等配置继续作为工具运行参数注入到具体 tool 或 tool properties 中。
+- **Tool 注册边界**：`config` 包只负责把 `application.yaml` 识别并绑定成 properties bean，不维护工具注册、工具列表或工具装配逻辑。工具注册属于 harness/agent 层面的能力边界：Step 1 可先由 `tool.registry.ToolRegistry` 收集可用 `Tool`，后续若引入独立 Harness 管理层，则把注册/选择/暴露工具的逻辑迁移到 harness 包，再由 agent 层按上下文引用注册结果。
+- **CimoProperties 删除方向**：当前 `CimoProperties` 同时承载 provider、work-dir、agent、tool 等配置，但这些字段没有形成一个稳定的业务对象，只是把不相关的参数临时装进同一个 record。按第一性原理，它没有独立职责；按奥卡姆剃刀，应删除。`cimo.provider` 应由 `ClientFactory` 或 provider 选择配置读取；`cimo.work-dir` 应由创建 `AgentContext` 的入口/上下文构建处读取；`cimo.agent.max-tool-rounds` 应由 Agent Loop 或 AgentContext 构建处从 `application.yaml` 注入，不在 `CimoProperties` 构造器里写默认对象；`cimo.tool.bash.timeout-seconds` 可由 `BashTool` 或极窄的 `BashToolProperties` 读取。
+- **BashTool 能力边界**：Step 1 支持哪些命令不是运行时配置能力，而是 `BashTool` 自身实现和 schema 暴露的一部分。`allowed-commands` 不应出现在 `CimoProperties` 或 `application.yaml` 中，否则配置可以绕过当前 Step 的能力边界。Step 1 固定只支持 `echo`；后续扩展命令时，必须通过修改 `BashTool` 的解析、校验、schema 和测试来显式扩大能力。
 - **CLI 形态**：做成类似 Codex / Claude Code 的启动即交互体验：`./gradlew bootRun` 后进入 `>` 提示符，用户直接输入自然语言；底层用 JLine 读取输入并接入 Spring 生命周期，不采用 Spring Shell 的 `ask ...` 命令模式，也不使用裸 `Scanner`。
 - **CLI 模式确认**：当前方向明确使用 CLI/JLine REPL 模式作为 Step 1 入口，不再沿用 Spring Shell 命令模式；文档、依赖和入口实现都应围绕“启动即进入自然语言 REPL”收口。决策时间：2026-05-09 16:00 CST，Git Commit: 未提交。
 - **Bash 安全边界**：Step 1 的白名单只开放 `echo`；更复杂的命令、参数解析、路径隔离、命令注入防护和沙箱策略全部放到后续安全 Step 中迭代。
@@ -384,10 +387,12 @@ $ ./gradlew bootRun
 - [x] S1-18 配置边界重构：`CimoProperties` 移除 provider-specific 字段，新增 `AnthropicProperties` / `OpenAiProperties`，`ClientFactory` 根据 `cimo.provider` 选择 adapter，Spring AI Anthropic 配置引用 `cimo.anthropic` 作为入口（2026-05-09 15:33 CST，Git Commit: 未提交）
 - [x] S1-19 Tool 注册边界重构：`config` 包只保留 `application.yaml` → properties bean 的绑定职责，移除/避免 `ToolConfig` 这类在 config 中维护工具注册或装配的逻辑；工具注册放到 `tool.registry` / agent-harness 边界，后续 Harness 独立包出现后迁移到 harness 层再供 agent 引用（完成时间：2026-05-09 16:09 CST，Git Commit: 未提交）
 - [x] S1-20 Provider Client 懒创建边界重构：`ClientFactory` / provider 配置链路必须先识别 `cimo.provider`，再只创建被选中的 provider client；未来加入 OpenAI 时不能在 Spring bean 创建阶段同时初始化 Anthropic/OpenAI 等所有 provider。若条件化 Bean 不自然，则采用普通工厂模式手动构造唯一 client（完成时间：2026-05-09 16:09 CST，Git Commit: 未提交）
-- [ ] S1-21 端到端验证：`通过bash输出hello` 走通（代码已完成，等待配置真实 `ANTHROPIC_API_KEY` 后验证）
-- [x] S1-22 编译与上下文验证：`./gradlew test` 通过（2026-05-09 12:41 CST，Git Commit: 未提交）
-- [x] S1-23 CLI 启动烟测：`printf 'exit\n' | ./gradlew bootRun` 通过（2026-05-09 12:41 CST，Git Commit: 未提交）
-- [x] S1-24 CLI 模式文档收口：`AGENTS.md`、`README.md`、`plan.md` 统一当前方向为 JLine CLI REPL，移除/标注 Spring Shell 命令模式的旧表述；后续代码和依赖再按该方向清理（2026-05-09 16:00 CST，Git Commit: 未提交）
+- [ ] S1-21 配置边界再次收口：删除无独立职责的 `CimoProperties`；`cimo.provider` 贴近 provider 选择逻辑读取，`cimo.work-dir` 贴近 `AgentContext` 构建读取，`cimo.agent.max-tool-rounds` 从 `application.yaml` 注入 Agent/Context 构建链路；`BashTool` 只读取自身运行参数（如 timeout），不从总配置读取命令白名单（决策时间：2026-05-09 16:24 CST，Git Commit: 30a7095）。
+- [ ] S1-22 BashTool 能力配置收口：从 `application.yaml` 移除 `cimo.tool.bash.allowed-commands`；Step 1 的 echo 白名单固定在 `BashTool` 实现和 schema 中，后续扩展命令必须通过代码和测试显式演进（决策时间：2026-05-09 16:24 CST，Git Commit: 30a7095）。
+- [ ] S1-23 端到端验证：`通过bash输出hello` 走通（代码已完成，等待配置真实 `ANTHROPIC_API_KEY` 后验证）
+- [x] S1-24 编译与上下文验证：`./gradlew test` 通过（2026-05-09 12:41 CST，Git Commit: 未提交）
+- [x] S1-25 CLI 启动烟测：`printf 'exit\n' | ./gradlew bootRun` 通过（2026-05-09 12:41 CST，Git Commit: 未提交）
+- [x] S1-26 CLI 模式文档收口：`AGENTS.md`、`README.md`、`plan.md` 统一当前方向为 JLine CLI REPL，移除/标注 Spring Shell 命令模式的旧表述；后续代码和依赖再按该方向清理（2026-05-09 16:00 CST，Git Commit: 未提交）
 
 ---
 
@@ -413,6 +418,8 @@ $ ./gradlew bootRun
 | 2026-05-09 15:33 CST | 配置边界重构：拆分 Cimo 全局配置与 LLM provider 专属配置，`ClientFactory` 根据 `cimo.provider` 选择 adapter，Spring AI Anthropic 配置改为引用 `cimo.anthropic` | 未提交 |
 | 2026-05-09 16:00 CST | CLI 模式文档收口：`AGENTS.md`、`README.md`、`plan.md` 统一当前方向为 JLine CLI REPL，后续代码和依赖按该方向清理 | 未提交 |
 | 2026-05-09 16:09 CST | S1-13 / S1-19 / S1-20：删除无职责 `ToolSpec`；移除 config 层工具装配；改为手动按选中 provider 创建 Anthropic client，避免 Spring AI provider 自动配置提前初始化 | 未提交 |
+| 2026-05-09 16:24 CST | S1-21 / S1-22 决策：`CimoProperties` 无独立职责，计划删除；`maxToolRounds` 从 `application.yaml` 注入 Agent/Context 构建链路；Bash 命令白名单固定在 `BashTool` 实现和 schema，不作为 YAML 配置 | 30a7095 |
+| 2026-05-09 16:30 CST | Plan 文件收口：根目录 `plan.md` 迁移为 `.plan/plan_step1.md`，新增 `.plan/plan_main.md` 作为总入口 | f372db6 |
 
 ## 决策记录
 
@@ -428,3 +435,5 @@ $ ./gradlew bootRun
 | 2026-05-09 15:49 CST | `ToolSpec` 无代码引用，且只是 Anthropic schema 的薄转换层；当前转换职责应留在 provider adapter 内部。按第一性原理和奥卡姆剃刀，不保留没有独立职责和当前收益的抽象，进入编码阶段后删除该文件。 | 4c1c015 |
 | 2026-05-09 15:55 CST | 修正 Provider Client 创建边界：不能在 Spring bean 创建阶段初始化所有 LLM provider 再由 `ClientFactory` 选择其一；必须先识别 `cimo.provider`，再只创建被选中的 provider client。若条件化 Bean 让生命周期复杂化，则退回普通工厂模式以保持最小设计。 | 4c1c015 |
 | 2026-05-09 16:00 CST | 确认入口方向使用 CLI/JLine REPL 模式：`./gradlew bootRun` 后直接进入自然语言交互提示符，不采用 Spring Shell 命令模式；README、AGENTS、plan 先统一该方向，后续代码和依赖按此收口。 | 未提交 |
+| 2026-05-09 16:24 CST | 修正运行配置边界：`CimoProperties` 当前只是把 provider/work-dir/agent/tool 临时聚合，没有独立职责和可验证收益，应删除；各配置改由真正使用它们的组件读取。`maxToolRounds` 从 `application.yaml` 注入 Agent/Context 构建链路；Bash 的命令白名单属于 `BashTool` 能力定义，不进入 YAML 或总配置类。 | 30a7095 |
+| 2026-05-09 16:30 CST | 计划文件统一收口到 `.plan/`：`plan_main.md` 作为总入口，`plan_step1.md` 承载当前 Step 1 详细计划；根目录不再维护 `plan.md`。 | f372db6 |

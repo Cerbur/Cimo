@@ -11,7 +11,7 @@ Cimo 当前处于规划阶段。
 开发流程遵循 [AGENTS.md](AGENTS.md)：
 
 - 先完善计划，再开始编码。
-- 关键决策和计划完成记录都维护在 `plan.md` 中。
+- 关键决策和计划完成记录都维护在 `.plan/` 中。
 - 当某个计划项完成时，记录完成时间和对应的 Git commit ID。
 
 ## 路线图
@@ -23,7 +23,7 @@ Cimo 当前处于规划阶段。
 5. 独立 Web 前端
 6. 安全加固与 Docker 部署
 
-详细实施计划见 [plan.md](plan.md)。
+详细实施计划见 [.plan/plan_main.md](.plan/plan_main.md)。
 
 ## 技术栈
 
