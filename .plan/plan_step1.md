@@ -220,6 +220,7 @@ cimo:
     model: claude-sonnet-4-20250514
     base-url: ${ANTHROPIC_BASE_URL:}
     max-tokens: 4096
+    debug: false
   agent:
     max-tool-rounds: 5
   tool:
@@ -262,6 +263,8 @@ minimal version only supports echo through bash for now.
 - **Provider Client 创建边界**：LLM provider 的选择必须发生在 provider client bean 创建之前，而不是启动期先生成所有 provider 再由 `ClientFactory` 选择其一。未被 `cimo.provider` 选中的 provider 不应初始化、不应校验必填配置、不应创建 SDK client 或潜在网络连接。实现上可优先使用 Spring 条件化 Bean（如按 `cimo.provider` 暴露唯一 `Client` / provider adapter），如果 Spring Bean 生命周期让链路变复杂，则完全退回普通工厂模式，在 `createClient()` 中按已识别 provider 手动构造唯一需要的 client。决策时间：2026-05-09 15:55 CST，Git Commit: 4c1c015。
 - **Anthropic 必填配置与启动失败边界**：`AnthropicProperties.baseUrl` 必须从配置绑定读取，`AnthropicProperties` 构造器不再写死 `https://api.anthropic.com` 或任何默认值；`model` 仍可由配置文件给出默认模型，但不由 properties 构造器兜底。`provider=anthropic` 时，`ClientFactory.createAnthropicChatModel()` 链路必须在创建 `AnthropicChatModel` 前校验 Anthropic 必要值：`apiKey`、`model`、`baseUrl` 均不能为空白，且 `baseUrl` 必须是合法 HTTP/HTTPS URL。校验失败时抛出清晰的启动期异常，让 Spring Boot 启动失败，不进入 CLI REPL，也不延迟到第一次用户输入或第一次 API 调用才失败。决策时间：2026-05-09 17:01 CST，Git Commit: 未提交。
 - **AnthropicProperties 按需加载验证**：编码阶段需要尝试让 `AnthropicProperties` 只在 `provider=anthropic` 时参与加载/绑定/校验，避免 `provider=openai` 或后续其他 provider 时因为 Anthropic 缺少 `apiKey/baseUrl` 而阻塞启动。优先方案是条件化 provider 配置或条件化 provider client bean；如果 Spring Boot `@ConfigurationProperties` 生命周期不适合完全按需加载，则接受 properties bean 被绑定，但必须保证强校验只发生在 `createAnthropicChatModel()` 或 Anthropic 专属链路内，未选中 provider 不触发 Anthropic 必填检查。决策时间：2026-05-09 17:01 CST，Git Commit: 未提交。
+- **S1-27~S1-30 合并执行方案**：这四项视为同一个 Anthropic 配置契约收口任务，一次性处理，避免在配置默认值、启动校验、按需加载和测试之间反复改动。执行顺序：先收口 `AnthropicProperties.baseUrl`，确保只从 `application.yaml` / `ANTHROPIC_BASE_URL` 绑定；再在 `ClientFactory.createAnthropicChatModel()` 或等价的 Anthropic provider 创建链路中集中校验 `apiKey/model/baseUrl`；随后验证非 Anthropic provider 不触发 Anthropic 必填校验或 SDK client 创建；最后补齐失败路径测试。该合并任务不引入新的全局配置聚合类，不把 provider-specific 字段塞回 `CimoProperties`，也不新增抽象层来提前包装校验逻辑；只有当测试证明校验规则被多个 provider 共享时，才考虑提取通用 validator。决策时间：2026-05-10 02:57 CST，Git Commit: a46cd2c。
+- **Anthropic Debug 输出边界**：新增 `cimo.anthropic.debug` 配置，默认 `false`。当且仅当 `debug=true` 且 `provider=anthropic` 时，`ClientFactory.createAnthropicChatModel()` 在 `validateAnthropicProperties()` 之后、构建 `AnthropicChatModel` 之前，向 CLI 打印当前 Anthropic 配置信息，帮助确认启动时实际绑定到的 `model`、`baseUrl`、`maxTokens` 等值。第一性原理：这个开关解决的是本地调试配置绑定和环境变量覆盖是否生效的问题；它不是业务日志框架，也不是长期可观测性设计，所以不引入新的日志抽象或全局 debug properties。安全边界：`apiKey` 只能脱敏打印，例如仅展示是否已配置、长度或首尾少量字符，不能完整输出凭据。决策时间：2026-05-10 03:11 CST，Git Commit: a46cd2c。
 - **Tool 注册边界**：`config` 包只负责把 `application.yaml` 识别并绑定成 properties bean，不维护工具注册、工具列表或工具装配逻辑。工具注册属于 harness/agent 层面的能力边界：Step 1 可先由 `tool.registry.ToolRegistry` 收集可用 `Tool`，后续若引入独立 Harness 管理层，则把注册/选择/暴露工具的逻辑迁移到 harness 包，再由 agent 层按上下文引用注册结果。
 - **CimoProperties 删除方向**：当前 `CimoProperties` 同时承载 provider、work-dir、agent、tool 等配置，但这些字段没有形成一个稳定的业务对象，只是把不相关的参数临时装进同一个 record。按第一性原理，它没有独立职责；按奥卡姆剃刀，应删除。`cimo.provider` 应由 `ClientFactory` 或 provider 选择配置读取；`cimo.work-dir` 应由创建 `AgentContext` 的入口/上下文构建处读取；`cimo.agent.max-tool-rounds` 应由 Agent Loop 或 AgentContext 构建处从 `application.yaml` 注入，不在 `CimoProperties` 构造器里写默认对象；`cimo.tool.bash.timeout-seconds` 可由 `BashTool` 或极窄的 `BashToolProperties` 读取。
 - **BashTool 能力边界**：Step 1 支持哪些命令不是运行时配置能力，而是 `BashTool` 自身实现和 schema 暴露的一部分。`allowed-commands` 不应出现在 `CimoProperties` 或 `application.yaml` 中，否则配置可以绕过当前 Step 的能力边界。Step 1 固定只支持 `echo`；后续扩展命令时，必须通过修改 `BashTool` 的解析、校验、schema 和测试来显式扩大能力。
@@ -398,13 +401,14 @@ $ ./gradlew bootRun
 - [x] S1-24 编译与上下文验证：`./gradlew test` 通过（2026-05-09 12:41 CST，Git Commit: 未提交）
 - [x] S1-25 CLI 启动烟测：`printf 'exit\n' | ./gradlew bootRun` 通过（2026-05-09 12:41 CST，Git Commit: 未提交）
 - [x] S1-26 CLI 模式文档收口：`AGENTS.md`、`README.md`、`plan.md` 统一当前方向为 JLine CLI REPL，移除/标注 Spring Shell 命令模式的旧表述；后续代码和依赖再按该方向清理（2026-05-09 16:00 CST，Git Commit: 未提交）
-- [ ] S1-27 Anthropic baseUrl 配置契约收口：`AnthropicProperties.baseUrl` 只从配置读取，不在 properties 构造器中设置默认值；`application.yaml` 暴露 `cimo.anthropic.base-url` / `ANTHROPIC_BASE_URL` 入口，默认是否为空由启动校验负责解释。
-- [ ] S1-28 Anthropic 启动期必要值校验：当 `cimo.provider=anthropic` 时，`ClientFactory.createAnthropicChatModel()` 在构建 Spring AI `AnthropicChatModel` 前校验 `apiKey`、`model`、`baseUrl`；失败时抛出明确异常并中止应用启动。
-- [ ] S1-29 AnthropicProperties 按需加载验证：尝试让 `AnthropicProperties` 仅在 Anthropic provider 链路需要时加载；若生命周期成本高，则至少保证未选中 Anthropic provider 时不触发 Anthropic 必填校验、不创建 Anthropic SDK client。
-- [ ] S1-30 配置失败测试补充：新增/调整测试覆盖 `provider=anthropic` 缺少 `apiKey/model/baseUrl` 时启动或 client 创建失败、`baseUrl` 非 HTTP/HTTPS URL 时失败，以及非 Anthropic provider 不因 Anthropic 配置缺失而失败。
+- [x] S1-27 Anthropic baseUrl 配置契约收口：`AnthropicProperties.baseUrl` 只从配置读取，不在 properties 构造器中设置默认值；`application.yaml` 暴露 `cimo.anthropic.base-url` / `ANTHROPIC_BASE_URL` 入口，默认是否为空由启动校验负责解释（完成时间：2026-05-10 03:00 CST，Git Commit: 未提交）。
+- [x] S1-28 Anthropic 启动期必要值校验：当 `cimo.provider=anthropic` 时，`ClientFactory.createAnthropicChatModel()` 在构建 Spring AI `AnthropicChatModel` 前校验 `apiKey`、`model`、`baseUrl`；失败时抛出明确异常并中止应用启动（完成时间：2026-05-10 03:00 CST，Git Commit: 未提交）。
+- [x] S1-29 AnthropicProperties 按需加载验证：尝试让 `AnthropicProperties` 仅在 Anthropic provider 链路需要时加载；若生命周期成本高，则至少保证未选中 Anthropic provider 时不触发 Anthropic 必填校验、不创建 Anthropic SDK client（完成时间：2026-05-10 03:00 CST，Git Commit: 未提交）。
+- [x] S1-30 配置失败测试补充：新增/调整测试覆盖 `provider=anthropic` 缺少 `apiKey/model/baseUrl` 时启动或 client 创建失败、`baseUrl` 非 HTTP/HTTPS URL 时失败，以及非 Anthropic provider 不因 Anthropic 配置缺失而失败（完成时间：2026-05-10 03:00 CST，Git Commit: 未提交）。
 - [x] S1-31 Context 上限不在 Step 1 做：`MessageHistory` 去掉 `maxMessages` 和 `trim()`，简化为纯追加；后续加压缩逻辑时整块重构（完成时间：2026-05-10 12:30 CST，Git Commit: 未提交）
 - [ ] S1-32 收口无消费者的状态事件：`DefaultAgentLoop` 当前发出 `AgentEvent.StatusChange(AgentState.WAITING_FOR_TOOL / COMPLETED / ERROR / SHUTDOWN)`，但 CLI 入口直接忽略 `StatusChange`，Step 1 没有 UI/API/Session/Harness 等真实消费者。按第一性原理，状态模型暂时没有可观察收益；后续编码阶段应删除或暂停扩展 `AgentState` / `StatusChange`，保留 `ToolCall`、`ToolResult`、`Response`、`Error` 等有真实输出价值的事件。等 Step 3 Session 或 Step 4 Harness/API 出现状态消费者时再重新引入。
 - [x] S1-33 Anthropic 输出 token 上限配置化：`SpringAiAnthropicClient` 中 `AnthropicChatOptions.maxTokens` 改为从 Anthropic provider 配置读取，`application.yaml` 提供 `cimo.anthropic.max-tokens: 4096`。该参数只限制单次模型输出长度，不代表上下文窗口；默认 4096 更适合作为 CLI Agent 的基础输出预算（完成时间：2026-05-10 02:52 CST，Git Commit: 未提交）。
+- [ ] S1-34 Anthropic 配置 debug 输出：`application.yaml` 增加 `cimo.anthropic.debug: false`；`AnthropicProperties` 增加 `debug` 字段；`ClientFactory` 在 `validateAnthropicProperties()` 之后根据该开关打印 Anthropic 配置信息到 CLI。验收标准：`debug=false` 时不输出配置；`debug=true` 时输出 `model/baseUrl/maxTokens/debug` 等可排查信息；`apiKey` 必须脱敏，不能完整打印。
 
 ---
 
@@ -435,6 +439,7 @@ $ ./gradlew bootRun
 | 2026-05-09 16:38 CST | S1-21 / S1-22：删除无独立职责的 `CimoProperties`；provider/work-dir/max-tool-rounds 改为贴近使用点注入；BashTool 只保留 timeout 配置，echo 白名单固定在实现和 schema，并补充边界测试 | 7e8c984 |
 | 2026-05-10 12:30 CST | S1-31 Context 上限不在 Step 1 做：按奥卡姆剃刀原则，`MessageHistory` 改为纯追加模式，去掉 `maxMessages` 和 `trim()`；后续加压缩逻辑时整块重构 | 未提交 |
 | 2026-05-10 02:52 CST | S1-33 Anthropic 输出 token 上限配置化：`SpringAiAnthropicClient` 从 `cimo.anthropic.max-tokens` 读取单次输出预算，默认 4096，不再硬编码 1024 | 未提交 |
+| 2026-05-10 03:00 CST | S1-27 / S1-28 / S1-29 / S1-30：Anthropic `baseUrl` 不再由 properties 构造器兜底；`ClientFactory` 在 Anthropic client 创建前集中校验 `apiKey/model/baseUrl`；非 Anthropic provider 不触发 Anthropic 校验；补充配置失败测试 | 未提交 |
 
 ## 决策记录
 
@@ -455,3 +460,5 @@ $ ./gradlew bootRun
 | 2026-05-09 17:01 CST | 细化 Anthropic 配置契约：`baseUrl` 从配置读取且不在 properties 构造器兜底；`provider=anthropic` 时在 `ClientFactory.createAnthropicChatModel()` 链路校验 `apiKey/model/baseUrl`，失败即中止启动；同时尝试让 `AnthropicProperties` 只在 Anthropic provider 需要时加载，至少保证未选中 provider 不触发 Anthropic 必填校验。 | 未提交 |
 | 2026-05-10 12:30 CST | Context 上限不在 Step 1 做：`MessageHistory` 简化为纯追加模式，去掉 `maxMessages` 参数和 `trim()` 逻辑；后续叠加压缩/窗口/摘要逻辑时整个统一重做。依据：Step 1 的核心目标是跑通 Agent Loop 链路，context 管理是独立且影响整个架构的能力，现在做一个简化版本反而会在重构时成为负债。奥卡姆剃刀——不做。 | 未提交 |
 | 2026-05-10 02:18 CST | `AgentState` / `StatusChange` 在 Step 1 当前没有真实消费者：`CliAgentEntry` 直接忽略状态事件，`WAITING_FOR_TOOL` 等状态不影响输出、控制流、工具执行、错误处理或测试断言。后续应先收口这类无可观察收益的状态维护，等 Session/Harness/API 需要状态时再重新设计。 | 924dd94 |
+| 2026-05-10 02:57 CST | S1-27~S1-30 作为同一个 Anthropic 配置契约收口任务合并处理：配置来源、启动期校验、非选中 provider 不触发校验、失败路径测试必须一起落地；不引入新的全局配置聚合类或提前抽象的通用 validator。 | a46cd2c |
+| 2026-05-10 03:11 CST | 新增 S1-34：`cimo.anthropic.debug` 仅用于本地确认 Anthropic 配置绑定结果；`ClientFactory` 在 Anthropic 必填校验通过后按开关打印配置，且 `apiKey` 必须脱敏；不为这个局部调试需求引入全局 debug 配置或日志抽象。 | a46cd2c |

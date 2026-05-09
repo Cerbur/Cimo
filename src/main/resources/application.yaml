@@ -4,10 +4,11 @@ spring:
 
 cimo:
   provider: anthropic
-  work-dir: ${user.dir}
+  work-dir: ${user.dir}/Documents/Code/Cimo/.tmp
   anthropic:
-    api-key: ${ANTHROPIC_API_KEY:}
-    model: claude-sonnet-4-20250514
+    api-key: ${ANTHROPIC_AUTH_TOKEN:}
+    model: ${ANTHROPIC_MODEL:}
+    base-url: ${ANTHROPIC_BASE_URL:}
     max-tokens: 4096
   agent:
     max-tool-rounds: 5
