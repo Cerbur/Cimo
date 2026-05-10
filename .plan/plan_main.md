@@ -12,8 +12,10 @@
 
 ## 当前状态
 
-- 当前阶段：Step 1 - CLI Agent Loop + Anthropic + BashTool
-- 当前详细计划：[plan_step1.md](plan_step1.md)
+- 当前阶段：Step 2 - 工具集扩展 + CLI 内置指令
+- 当前详细计划：[plan_step2.md](plan_step2.md)
+- Step 1 完成时间：2026-05-11 03:37 CST
+- Step 1 对应 Git Commit：24062a7
 - 计划目录化完成时间：2026-05-09 16:30 CST
 - 对应 Git Commit：5e6875f
 
@@ -23,12 +25,18 @@
 
 | Step | 内容 | 详细计划 | 状态 |
 |------|------|----------|------|
-| Step 1 | CLI Agent Loop + Anthropic + BashTool | [plan_step1.md](plan_step1.md) | 进行中 |
+| Step 1 | CLI Agent Loop + Anthropic + BashTool | [plan_step1.md](plan_step1.md) | 已完成 |
 | Step 2 | 更多工具集，例如 Read / Write / Edit / Glob；CLI 内置指令识别与分发 | [plan_step2.md](plan_step2.md) | 规划中 |
 | Step 3 | Session 管理 + 消息历史持久化 | 待创建 | 未开始 |
 | Step 4 | Harness 管理层 + REST API | 待创建 | 未开始 |
 | Step 5 | Web 前端（独立项目） | 待创建 | 未开始 |
 | Step 6 | 安全加固 + Docker 部署 | 待创建 | 未开始 |
+
+## 横向计划
+
+| 计划 | 内容 | 详细计划 | 状态 |
+|------|------|----------|------|
+| QA | 自动化 QA 策略、风险地图、候选测试分层与后续质量门禁 | [plan_qa.md](plan_qa.md) | 规划中 |
 
 ---
 
@@ -50,3 +58,4 @@
 | 2026-05-10 CST | Step 1 修正 Cimo 一级配置边界：重新引入 `CimoProperties` 承载 `provider`、`debug`、`work-dir`、`agent` 等 Cimo 自身配置，替代 `SpringEnvironmentReader` 的静态 `Environment` 读取；provider-specific 配置仍保留在专属 properties 中。 | [plan_step1.md](plan_step1.md) |
 | 2026-05-10 CST | Spring Bean 注入规范：除构造器中存在真实初始化逻辑、派生对象创建或校验逻辑外，统一使用成员变量 `@Autowired` 显式注入；`DefaultAgentLoop` 当前构造器创建 `Client` 属于例外。 | [plan_step1.md](plan_step1.md) |
 | 2026-05-11 02:19 CST | Step 1 新增 S1-38 注释补充任务：按 AGENTS.md 注释质量要求，只补 public 类型职责、核心流程、关键约束和状态流转说明；不做机械注释、不改变行为。 | [plan_step1.md](plan_step1.md) |
+| 2026-05-11 03:35 CST | 新增跨阶段 QA 计划：先记录契约测试、替身端到端、CLI 黑盒、真实 provider smoke、安全边界、架构约束和 Plan QA 的候选方向；不把普通单测或覆盖率作为默认目标；暂不进入编码。 | [plan_qa.md](plan_qa.md) |

@@ -407,7 +407,7 @@ $ ./gradlew bootRun
 - [x] S1-37 按 `@Autowired` 成员变量注入规范重新梳理代码：除构造器中存在真实初始化逻辑、派生对象创建或校验逻辑的类外，Spring Bean 依赖统一改为成员变量上的 `@Autowired` 显式注入，不再用构造器只做字段赋值。明确例外：`DefaultAgentLoop` 当前 `DefaultAgentLoop(ClientFactory clientFactory)` 中调用 `clientFactory.createClient()` 并保存 `Client`，属于构造器内有逻辑处理，可以保留构造器注入。验收标准：检查所有 `@Component` / `@Configuration` / `@Service` 等 Spring 管理类；调整测试构造方式；确保 `./gradlew test` 通过。（完成时间：2026-05-11 02:13 CST，Git Commit: 4663fb7）
 - [x] S1-38 按 AGENTS.md 注释质量要求补充代码注释：为主代码中的 public 类、接口、record、enum 补充清晰中文类级注释，说明职责、输入输出或关键约束；为重要业务方法、公共方法、流程编排方法和带关键边界的方法补充中文注释；在 Agent Loop、provider adapter、工具执行、配置校验、CLI 输出等核心状态流转或边界分支处补充必要行注释。第一性原理：注释只解决“代码命名和结构无法直接表达的业务意图、设计约束、状态流转、边界假设或历史决策”，不为 getter/setter、简单私有辅助方法或一眼可读的代码补机械注释。验收标准：不改变运行行为；不新增抽象；不引入英文长篇注释；`./gradlew test` 通过。计划记录时间：2026-05-11 02:19 CST，Git Commit: 5af892d；完成时间：2026-05-11 02:24 CST，Git Commit: eb90938。
 - [x] S1-39 落地收口无消费者的 `AgentState` / `StatusChange`：基于 S1-32 的判断，删除当前 Step 1 没有真实消费者的状态事件，或明确暂停扩展并从 `DefaultAgentLoop` 当前事件流中移除；保留 `ToolCall`、`ToolResult`、`Response`、`Error` 等有真实输出价值的事件。验收标准：CLI 交互可观察行为不退化；相关测试同步调整；`./gradlew test` 通过；完成记录说明状态模型等 Step 3 Session 或 Step 4 Harness/API 出现真实消费者时再重新引入。（完成时间：2026-05-11 02:37 CST，Git Commit: 0886208；验证：`./gradlew test` 通过）
-- [x] S1-41 补充真实 CLI 交互验证记录：在真实终端运行 `./gradlew bootRun`，输入 `通过bash输出hello`，确认 JLine REPL、Anthropic 调用、`bash echo` tool call、tool result 展示和最终回复都能在 CLI 中完整走通。验收标准：记录验证时间、验证方式和对应 Git Commit；如果当前工具环境仍无法通过 stdin 驱动 JLine，需明确区分“真实终端手动验证”和“测试替身/AgentLoop 端到端验证”的边界。完成时间：2026-05-11 02:40 CST，Git Commit: 0886208；验证方式：先发现 `bootRun` 未转交标准输入会导致 JLine 立即 EOF，随后在 `build.gradle` 为 `bootRun` 设置 `standardInput = System.in`，再用 expect 伪终端驱动真实 `./gradlew bootRun`，输入 `通过bash输出hello` 后观察到 `Thinking: Calling Anthropic...`、`Tool: bash echo hello`、`Result: bash: hello`、最终回复包含 `hello`，并输入 `exit` 后正常 `Bye!` / `BUILD SUCCESSFUL`。
+- [x] S1-40 补充真实 CLI 交互验证记录：在真实终端运行 `./gradlew bootRun`，输入 `通过bash输出hello`，确认 JLine REPL、Anthropic 调用、`bash echo` tool call、tool result 展示和最终回复都能在 CLI 中完整走通。验收标准：记录验证时间、验证方式和对应 Git Commit；如果当前工具环境仍无法通过 stdin 驱动 JLine，需明确区分“真实终端手动验证”和“测试替身/AgentLoop 端到端验证”的边界。完成时间：2026-05-11 02:40 CST，Git Commit: 0886208；验证方式：先发现 `bootRun` 未转交标准输入会导致 JLine 立即 EOF，随后在 `build.gradle` 为 `bootRun` 设置 `standardInput = System.in`，再用 expect 伪终端驱动真实 `./gradlew bootRun`，输入 `通过bash输出hello` 后观察到 `Thinking: Calling Anthropic...`、`Tool: bash echo hello`、`Result: bash: hello`、最终回复包含 `hello`，并输入 `exit` 后正常 `Bye!` / `BUILD SUCCESSFUL`。
 
 ---
 
@@ -445,8 +445,9 @@ $ ./gradlew bootRun
 | 2026-05-11 02:13 CST | S1-37 Spring 注入风格收口：`ClientFactory`、`CliAgentEntry` 改为成员变量 `@Autowired` 注入；保留存在派生对象创建或初始化逻辑的构造器；同步调整测试构造方式；`./gradlew test` 通过 | 4663fb7 |
 | 2026-05-11 02:19 CST | S1-38 计划补充：按 AGENTS.md 注释质量要求，为主代码补充职责、边界、状态流转和关键意图注释；不做机械注释、不改变行为 | 5af892d |
 | 2026-05-11 02:24 CST | S1-38 注释补充完成：为主代码 public 类型补充中文职责注释，并在 Agent Loop、Anthropic adapter、BashTool、CLI 输出和 provider 创建边界补充关键意图说明；`./gradlew test` 通过 | eb90938 |
-| 2026-05-11 02:40 CST | S1-41 真实 CLI 交互验证完成：修正 `bootRun` 标准输入转交后，通过 expect 伪终端运行 `./gradlew bootRun`，输入 `通过bash输出hello`，确认 JLine REPL、Anthropic 调用、`bash echo` tool call、tool result 展示、最终回复和 `exit` 退出链路完整走通 | 0886208 |
+| 2026-05-11 02:40 CST | S1-40 真实 CLI 交互验证完成：修正 `bootRun` 标准输入转交后，通过 expect 伪终端运行 `./gradlew bootRun`，输入 `通过bash输出hello`，确认 JLine REPL、Anthropic 调用、`bash echo` tool call、tool result 展示、最终回复和 `exit` 退出链路完整走通 | 0886208 |
 | 2026-05-11 02:37 CST | S1-39 状态事件收口：删除 Step 1 无真实消费者的 `AgentState` / `StatusChange`，`DefaultAgentLoop` 不再发出状态事件，CLI 不再保留空消费分支；状态模型等 Step 3 Session 或 Step 4 Harness/API 出现真实消费者时再重新引入；`./gradlew test` 通过 | 0886208 |
+| 2026-05-11 03:37 CST | Step 1 整体完成：检查清单编号收口，确认 CLI Agent Loop + Anthropic + BashTool 的最小纵向链路、计划记录和真实交互验证均已完成；后续进入 Step 2 规划与执行 | 24062a7 |
 
 ## 决策记录
 
@@ -473,4 +474,4 @@ $ ./gradlew bootRun
 | 2026-05-10 CST | 修正 Cimo 一级配置设计：`SpringEnvironmentReader` 的静态 `Environment` 读取方式不再保留；重新引入 `CimoProperties` 承载 `provider`、`debug`、`work-dir`、`agent` 等 Cimo 自身运行配置，并通过显式注入供使用处读取。该决策覆盖 2026-05-09 删除 `CimoProperties` 的旧方向，但不改变 provider-specific 配置继续拆到 `AnthropicProperties` / `OpenAiProperties` 的边界。 | 未提交 |
 | 2026-05-10 CST | 修正 Spring 注入规范：除构造器中有真实初始化逻辑、派生对象创建或校验逻辑的类外，Spring Bean 依赖统一使用成员变量 `@Autowired` 显式注入；`DefaultAgentLoop` 通过 `ClientFactory.createClient()` 创建 `Client` 属于例外，可保留构造器注入。 | 未提交 |
 | 2026-05-11 02:19 CST | 注释补充边界：只补足主代码中 public 类型职责、核心流程、关键约束和不易误改的边界说明；简单样板代码不补机械注释，避免注释噪声盖过代码本身。 | 5af892d |
-| 2026-05-11 CST | Step 1 收尾范围确认：加入 S1-39 状态事件收口和 S1-41 真实 CLI 交互验证；Spring AI Anthropic 流式 delta 语义放入 Step 2；`ClientFactory` 与 `ToolRegistry` 的长期边界先不在 Step 1 继续展开。 | 未提交 |
+| 2026-05-11 CST | Step 1 收尾范围确认：加入 S1-39 状态事件收口和 S1-40 真实 CLI 交互验证；Spring AI Anthropic 流式 delta 语义放入 Step 2；`ClientFactory` 与 `ToolRegistry` 的长期边界先不在 Step 1 继续展开。 | 未提交 |
