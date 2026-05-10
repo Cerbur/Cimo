@@ -101,8 +101,6 @@ public class CliAgentEntry implements AgentEntry, ApplicationRunner, AgentEventH
             case AgentEvent.ToolResult toolResult -> System.out.println(formatToolResult(toolResult));
             case AgentEvent.Response response -> System.out.print(response.content());
             case AgentEvent.Error error -> System.out.println("Error: " + error.message());
-            case AgentEvent.StatusChange ignored -> {
-            }
         }
         // Response 事件可能是文本增量，只有工具结果或错误这类完整行事件才主动 flush。
         if (event instanceof AgentEvent.Response response && response.content().endsWith("\n")) {

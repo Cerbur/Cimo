@@ -32,10 +32,4 @@ public sealed interface AgentEvent {
 
     record Error(String message) implements AgentEvent {
     }
-
-    /**
-     * 预留给后续 Session / Harness 的状态事件；当前 CLI 默认忽略。
-     */
-    record StatusChange(AgentState state) implements AgentEvent {
-    }
 }

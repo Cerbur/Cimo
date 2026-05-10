@@ -17,7 +17,6 @@ import ai.cerbur.cimo.client.model.StreamEvent;
 import ai.cerbur.cimo.client.model.StreamEventType;
 import ai.cerbur.cimo.entry.event.AgentEvent;
 import ai.cerbur.cimo.entry.event.AgentEventHandler;
-import ai.cerbur.cimo.entry.event.AgentState;
 import ai.cerbur.cimo.tool.Tool;
 import ai.cerbur.cimo.tool.ToolResult;
 
@@ -40,7 +39,6 @@ public class DefaultAgentLoop implements AgentLoop {
     public void start(AgentContext context, AgentEventHandler handler) {
         this.context = Objects.requireNonNull(context, "context");
         this.handler = Objects.requireNonNull(handler, "handler");
-        emit(new AgentEvent.StatusChange(AgentState.RUNNING));
     }
 
     @Override
@@ -57,13 +55,11 @@ public class DefaultAgentLoop implements AgentLoop {
             history.add(new ChatMessage(ChatRole.ASSISTANT, turn.content()));
             if (turn.toolUses().isEmpty()) {
                 emit(new AgentEvent.Response("\n"));
-                emit(new AgentEvent.StatusChange(AgentState.COMPLETED));
                 return;
             }
 
             List<ContentBlock> toolResults = new ArrayList<>();
             for (ContentBlock.ToolUse toolUse : turn.toolUses()) {
-                emit(new AgentEvent.StatusChange(AgentState.WAITING_FOR_TOOL));
                 emit(new AgentEvent.ToolCall(toolUse.name(), toolUse.input()));
                 Tool tool = context.toolRegistry().getTool(toolUse.name())
                         .orElseThrow(() -> new IllegalArgumentException("Unknown tool: " + toolUse.name()));
@@ -77,12 +73,10 @@ public class DefaultAgentLoop implements AgentLoop {
         }
 
         emit(new AgentEvent.Error("Reached max tool rounds: " + context.maxToolRounds()));
-        emit(new AgentEvent.StatusChange(AgentState.ERROR));
     }
 
     @Override
     public void shutdown() {
-        emit(new AgentEvent.StatusChange(AgentState.SHUTDOWN));
     }
 
     private AssistantTurn callClient() {

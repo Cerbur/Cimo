@@ -115,16 +115,6 @@ public sealed interface AgentEvent {
     record ToolResult(String toolName, String result) extends AgentEvent {}
     record Response(String content)       extends AgentEvent {}
     record Error(String message)          extends AgentEvent {}
-    record StatusChange(AgentState state) extends AgentEvent {}
-}
-
-public enum AgentState {
-    INITIALIZING,
-    RUNNING,
-    WAITING_FOR_TOOL,
-    COMPLETED,
-    ERROR,
-    SHUTDOWN
 }
 
 public interface AgentEventHandler {
@@ -275,7 +265,7 @@ minimal version only supports echo through bash for now.
 - **CLI 模式确认**：当前方向明确使用 CLI/JLine REPL 模式作为 Step 1 入口，不再沿用 Spring Shell 命令模式；文档、依赖和入口实现都应围绕“启动即进入自然语言 REPL”收口。决策时间：2026-05-09 16:00 CST，Git Commit: 未提交。
 - **Bash 安全边界**：Step 1 的白名单只开放 `echo`；更复杂的命令、参数解析、路径隔离、命令注入防护和沙箱策略全部放到后续安全 Step 中迭代。
 - **BashTool 参数结构**：Step 1 不接收整条 shell 字符串，只接收结构化参数，例如 `{ "command": "echo", "args": ["hello"] }`，执行时由 `BashTool` 组装为受控的 `echo` 调用。
-- **AgentState 命名**：统一使用 `INITIALIZING / RUNNING / WAITING_FOR_TOOL / COMPLETED / ERROR / SHUTDOWN`。
+- **状态事件收口**：Step 1 没有 Session / Harness / API 等真实状态消费者，CLI 对状态变化也没有可观察输出收益；当前事件模型只保留 `Thinking`、`ToolCall`、`ToolResult`、`Response`、`Error` 等入口层确实需要展示的事件。`AgentState` / `StatusChange` 等状态模型等 Step 3 Session 或 Step 4 Harness/API 出现真实消费者时再重新设计并引入。
 
 ### Agent Loop 完整流程
 
@@ -382,7 +372,7 @@ $ ./gradlew bootRun
 - [x] S1-02 明确 Anthropic 集成方式：Spring AI 管依赖和配置入口，Cimo 自己掌控 Agent Loop 与 tool_result 协议
 - [x] S1-03 CliAgentEntry（JLine 交互式 REPL + 事件输出）
 - [x] S1-04 AgentEvent 模型（sealed class）
-- [x] S1-05 AgentState 枚举定义（INITIALIZING / RUNNING / WAITING_FOR_TOOL / COMPLETED / ERROR / SHUTDOWN）
+- [x] S1-05 AgentState 枚举定义（INITIALIZING / RUNNING / WAITING_FOR_TOOL / COMPLETED / ERROR / SHUTDOWN；后续由 S1-39 删除无消费者状态模型）
 - [x] S1-06 ChatMessage 改为 block-based 模型（Text / ToolUse / ToolResult）
 - [x] S1-07 System prompt 通过 ClientRequest 显式传入
 - [x] S1-08 SpringAiAnthropicClient 流式调用 + tool_use 响应解析
@@ -409,13 +399,15 @@ $ ./gradlew bootRun
 - [x] S1-29 AnthropicProperties 按需加载验证：尝试让 `AnthropicProperties` 仅在 Anthropic provider 链路需要时加载；若生命周期成本高，则至少保证未选中 Anthropic provider 时不触发 Anthropic 必填校验、不创建 Anthropic SDK client（完成时间：2026-05-10 03:00 CST，Git Commit: 0c5f34d）。
 - [x] S1-30 配置失败测试补充：新增/调整测试覆盖 `provider=anthropic` 缺少 `apiKey/model/baseUrl` 时启动或 client 创建失败、`baseUrl` 非 HTTP/HTTPS URL 时失败，以及非 Anthropic provider 不因 Anthropic 配置缺失而失败（完成时间：2026-05-10 03:00 CST，Git Commit: 0c5f34d）。
 - [x] S1-31 Context 上限不在 Step 1 做：`MessageHistory` 去掉 `maxMessages` 和 `trim()`，简化为纯追加；后续加压缩逻辑时整块重构（完成时间：2026-05-10 12:30 CST，Git Commit: 未提交）
-- [ ] S1-32 收口无消费者的状态事件：`DefaultAgentLoop` 当前发出 `AgentEvent.StatusChange(AgentState.WAITING_FOR_TOOL / COMPLETED / ERROR / SHUTDOWN)`，但 CLI 入口直接忽略 `StatusChange`，Step 1 没有 UI/API/Session/Harness 等真实消费者。按第一性原理，状态模型暂时没有可观察收益；后续编码阶段应删除或暂停扩展 `AgentState` / `StatusChange`，保留 `ToolCall`、`ToolResult`、`Response`、`Error` 等有真实输出价值的事件。等 Step 3 Session 或 Step 4 Harness/API 出现状态消费者时再重新引入。
+- [x] S1-32 收口无消费者的状态事件：`DefaultAgentLoop` 当前发出 `AgentEvent.StatusChange(AgentState.WAITING_FOR_TOOL / COMPLETED / ERROR / SHUTDOWN)`，但 CLI 入口直接忽略 `StatusChange`，Step 1 没有 UI/API/Session/Harness 等真实消费者。按第一性原理，状态模型暂时没有可观察收益；后续编码阶段应删除或暂停扩展 `AgentState` / `StatusChange`，保留 `ToolCall`、`ToolResult`、`Response`、`Error` 等有真实输出价值的事件。等 Step 3 Session 或 Step 4 Harness/API 出现状态消费者时再重新引入。（完成时间：2026-05-11 02:37 CST，Git Commit: 未提交；由 S1-39 落地）
 - [x] S1-33 Anthropic 输出 token 上限配置化：`SpringAiAnthropicClient` 中 `AnthropicChatOptions.maxTokens` 改为从 Anthropic provider 配置读取，`application.yaml` 提供 `cimo.anthropic.max-tokens: 4096`。该参数只限制单次模型输出长度，不代表上下文窗口；默认 4096 更适合作为 CLI Agent 的基础输出预算（完成时间：2026-05-10 02:52 CST，Git Commit: 未提交）。
 - [x] S1-34 Anthropic 配置 debug 输出：`application.yaml` 增加全局 `cimo.debug: false`；`ClientFactory` 在具体 debug 输出逻辑需要时读取该全局开关，并在 `validateAnthropicProperties()` 之后根据该开关打印 Anthropic 配置信息到 CLI；`AnthropicProperties` 不承载 debug 字段。验收标准：`debug=false` 时不输出配置；`debug=true` 时输出 `model/baseUrl/maxTokens/debug` 等可排查信息；`apiKey` 必须脱敏，不能完整打印。（完成时间：2026-05-10 03:27 CST，Git Commit: 未提交；2026-05-10 后续修正：读取方式由 S1-36 改为显式注入 `CimoProperties`，不再使用 `SpringEnvironmentReader`）
 - [x] S1-35 CLI Tool 事件输出收口：默认模式不打印 provider 原始 `tool_use` JSON 或完整 `tool_result` 原始数据；原始协议内容仅在 `cimo.debug=true` 时输出。默认 `ToolCall` 展示为人类可读摘要，例如 `Tool: bash echo hello`；默认 `ToolResult` 展示带工具来源，例如 `Result: bash: hello`。补充测试覆盖：`debug=false` 不出现 `{"command":"echo","args":["hello"]}` 这类原始 JSON；`debug=true` 输出原始 tool use 诊断信息；结果展示包含工具名上下文。（完成时间：2026-05-11 01:59 CST，Git Commit: 4641b50）
 - [x] S1-36 实现 `CimoProperties` 替代 `SpringEnvironmentReader` 的配置读取逻辑：重新定义 `ai.cerbur.cimo.config.CimoProperties` 作为 `cimo` 一级运行配置绑定对象，承载 `provider`、`debug`、`work-dir`、`agent.max-tool-rounds` 等 Cimo 自身配置；删除 `SpringEnvironmentReader` 的静态 `Environment` 读取方式；`ClientFactory`、入口/上下文构建链路改为读取显式注入的 `CimoProperties`。边界：`AnthropicProperties` / `OpenAiProperties` 继续承载 provider-specific 配置；Bash timeout 继续保留在工具窄配置；Bash allowed commands 不配置化。验收：配置绑定测试覆盖默认值和 `cimo.debug` / `cimo.provider` / `cimo.work-dir` / `cimo.agent.max-tool-rounds`；原有 Anthropic 配置校验和非选中 provider 不触发校验的测试通过。（完成时间：2026-05-11 01:59 CST，Git Commit: 4641b50）
 - [x] S1-37 按 `@Autowired` 成员变量注入规范重新梳理代码：除构造器中存在真实初始化逻辑、派生对象创建或校验逻辑的类外，Spring Bean 依赖统一改为成员变量上的 `@Autowired` 显式注入，不再用构造器只做字段赋值。明确例外：`DefaultAgentLoop` 当前 `DefaultAgentLoop(ClientFactory clientFactory)` 中调用 `clientFactory.createClient()` 并保存 `Client`，属于构造器内有逻辑处理，可以保留构造器注入。验收标准：检查所有 `@Component` / `@Configuration` / `@Service` 等 Spring 管理类；调整测试构造方式；确保 `./gradlew test` 通过。（完成时间：2026-05-11 02:13 CST，Git Commit: 4663fb7）
 - [x] S1-38 按 AGENTS.md 注释质量要求补充代码注释：为主代码中的 public 类、接口、record、enum 补充清晰中文类级注释，说明职责、输入输出或关键约束；为重要业务方法、公共方法、流程编排方法和带关键边界的方法补充中文注释；在 Agent Loop、provider adapter、工具执行、配置校验、CLI 输出等核心状态流转或边界分支处补充必要行注释。第一性原理：注释只解决“代码命名和结构无法直接表达的业务意图、设计约束、状态流转、边界假设或历史决策”，不为 getter/setter、简单私有辅助方法或一眼可读的代码补机械注释。验收标准：不改变运行行为；不新增抽象；不引入英文长篇注释；`./gradlew test` 通过。计划记录时间：2026-05-11 02:19 CST，Git Commit: 5af892d；完成时间：2026-05-11 02:24 CST，Git Commit: eb90938。
+- [x] S1-39 落地收口无消费者的 `AgentState` / `StatusChange`：基于 S1-32 的判断，删除当前 Step 1 没有真实消费者的状态事件，或明确暂停扩展并从 `DefaultAgentLoop` 当前事件流中移除；保留 `ToolCall`、`ToolResult`、`Response`、`Error` 等有真实输出价值的事件。验收标准：CLI 交互可观察行为不退化；相关测试同步调整；`./gradlew test` 通过；完成记录说明状态模型等 Step 3 Session 或 Step 4 Harness/API 出现真实消费者时再重新引入。（完成时间：2026-05-11 02:37 CST，Git Commit: 未提交；验证：`./gradlew test` 通过）
+- [x] S1-41 补充真实 CLI 交互验证记录：在真实终端运行 `./gradlew bootRun`，输入 `通过bash输出hello`，确认 JLine REPL、Anthropic 调用、`bash echo` tool call、tool result 展示和最终回复都能在 CLI 中完整走通。验收标准：记录验证时间、验证方式和对应 Git Commit；如果当前工具环境仍无法通过 stdin 驱动 JLine，需明确区分“真实终端手动验证”和“测试替身/AgentLoop 端到端验证”的边界。完成时间：2026-05-11 02:40 CST，Git Commit: 未提交；验证方式：先发现 `bootRun` 未转交标准输入会导致 JLine 立即 EOF，随后在 `build.gradle` 为 `bootRun` 设置 `standardInput = System.in`，再用 expect 伪终端驱动真实 `./gradlew bootRun`，输入 `通过bash输出hello` 后观察到 `Thinking: Calling Anthropic...`、`Tool: bash echo hello`、`Result: bash: hello`、最终回复包含 `hello`，并输入 `exit` 后正常 `Bye!` / `BUILD SUCCESSFUL`。
 
 ---
 
@@ -453,6 +445,8 @@ $ ./gradlew bootRun
 | 2026-05-11 02:13 CST | S1-37 Spring 注入风格收口：`ClientFactory`、`CliAgentEntry` 改为成员变量 `@Autowired` 注入；保留存在派生对象创建或初始化逻辑的构造器；同步调整测试构造方式；`./gradlew test` 通过 | 4663fb7 |
 | 2026-05-11 02:19 CST | S1-38 计划补充：按 AGENTS.md 注释质量要求，为主代码补充职责、边界、状态流转和关键意图注释；不做机械注释、不改变行为 | 5af892d |
 | 2026-05-11 02:24 CST | S1-38 注释补充完成：为主代码 public 类型补充中文职责注释，并在 Agent Loop、Anthropic adapter、BashTool、CLI 输出和 provider 创建边界补充关键意图说明；`./gradlew test` 通过 | eb90938 |
+| 2026-05-11 02:40 CST | S1-41 真实 CLI 交互验证完成：修正 `bootRun` 标准输入转交后，通过 expect 伪终端运行 `./gradlew bootRun`，输入 `通过bash输出hello`，确认 JLine REPL、Anthropic 调用、`bash echo` tool call、tool result 展示、最终回复和 `exit` 退出链路完整走通 | 未提交 |
+| 2026-05-11 02:37 CST | S1-39 状态事件收口：删除 Step 1 无真实消费者的 `AgentState` / `StatusChange`，`DefaultAgentLoop` 不再发出状态事件，CLI 不再保留空消费分支；状态模型等 Step 3 Session 或 Step 4 Harness/API 出现真实消费者时再重新引入；`./gradlew test` 通过 | 未提交 |
 
 ## 决策记录
 
@@ -479,3 +473,4 @@ $ ./gradlew bootRun
 | 2026-05-10 CST | 修正 Cimo 一级配置设计：`SpringEnvironmentReader` 的静态 `Environment` 读取方式不再保留；重新引入 `CimoProperties` 承载 `provider`、`debug`、`work-dir`、`agent` 等 Cimo 自身运行配置，并通过显式注入供使用处读取。该决策覆盖 2026-05-09 删除 `CimoProperties` 的旧方向，但不改变 provider-specific 配置继续拆到 `AnthropicProperties` / `OpenAiProperties` 的边界。 | 未提交 |
 | 2026-05-10 CST | 修正 Spring 注入规范：除构造器中有真实初始化逻辑、派生对象创建或校验逻辑的类外，Spring Bean 依赖统一使用成员变量 `@Autowired` 显式注入；`DefaultAgentLoop` 通过 `ClientFactory.createClient()` 创建 `Client` 属于例外，可保留构造器注入。 | 未提交 |
 | 2026-05-11 02:19 CST | 注释补充边界：只补足主代码中 public 类型职责、核心流程、关键约束和不易误改的边界说明；简单样板代码不补机械注释，避免注释噪声盖过代码本身。 | 5af892d |
+| 2026-05-11 CST | Step 1 收尾范围确认：加入 S1-39 状态事件收口和 S1-41 真实 CLI 交互验证；Spring AI Anthropic 流式 delta 语义放入 Step 2；`ClientFactory` 与 `ToolRegistry` 的长期边界先不在 Step 1 继续展开。 | 未提交 |
