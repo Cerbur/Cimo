@@ -21,6 +21,9 @@ import ai.cerbur.cimo.entry.event.AgentState;
 import ai.cerbur.cimo.tool.Tool;
 import ai.cerbur.cimo.tool.ToolResult;
 
+/**
+ * 默认 Agent Loop 实现，串联模型流式响应、工具调用执行和消息历史追加。
+ */
 @Component
 public class DefaultAgentLoop implements AgentLoop {
 
@@ -48,6 +51,7 @@ public class DefaultAgentLoop implements AgentLoop {
         history.add(new ChatMessage(ChatRole.USER, List.of(new ContentBlock.Text(userInput))));
         emit(new AgentEvent.Thinking("Calling Anthropic..."));
 
+        // 每一轮最多只处理一次 assistant turn 和随后的工具结果，避免模型持续要求工具时无限循环。
         for (int round = 0; round < context.maxToolRounds(); round++) {
             AssistantTurn turn = callClient();
             history.add(new ChatMessage(ChatRole.ASSISTANT, turn.content()));
@@ -66,6 +70,7 @@ public class DefaultAgentLoop implements AgentLoop {
                 ToolResult result = tool.execute(toolUse.input());
                 String content = result.success() ? result.output() : result.error();
                 emit(new AgentEvent.ToolResult(toolUse.name(), content));
+                // toolUseId 必须沿用模型给出的 id，否则 provider 无法把结果关联回对应 tool_use。
                 toolResults.add(new ContentBlock.ToolResult(toolUse.id(), content, !result.success()));
             }
             history.add(new ChatMessage(ChatRole.USER, toolResults));
@@ -96,6 +101,7 @@ public class DefaultAgentLoop implements AgentLoop {
                 emit(new AgentEvent.Response(event.content()));
             }
             else if (event.type() == StreamEventType.TOOL_USE_END && event.toolCall() != null) {
+                // 在记录 tool_use 前先落盘已有文本，保留 assistant turn 中 text 与 tool_use 的原始顺序。
                 flushText(content, currentText);
                 ContentBlock.ToolUse toolUse = new ContentBlock.ToolUse(
                         event.toolCall().path("id").asText(),

@@ -1,5 +1,8 @@
 package ai.cerbur.cimo.prompt;
 
+/**
+ * Cimo 提示词集中入口，避免入口层、AgentLoop 和 provider adapter 内联大段 prompt。
+ */
 public final class CimoPrompts {
 
     public static final String STEP_1_SYSTEM_PROMPT = """

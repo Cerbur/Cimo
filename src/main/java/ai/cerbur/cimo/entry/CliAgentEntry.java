@@ -49,6 +49,7 @@ public class CliAgentEntry implements AgentEntry, ApplicationRunner, AgentEventH
 
     @Override
     public void start() {
+        // 入口层负责把 Spring 配置组装成 AgentContext；AgentLoop 不直接读取 Spring Environment。
         agentLoop.start(new AgentContext(
                 cimoProperties.workDir(),
                 CimoPrompts.STEP_1_SYSTEM_PROMPT,
@@ -68,6 +69,7 @@ public class CliAgentEntry implements AgentEntry, ApplicationRunner, AgentEventH
                 if (line == null || line.isBlank()) {
                     continue;
                 }
+                // Step 2 会把本地指令抽成 handler；这里先保留 Step 1 的兼容退出语义。
                 if ("exit".equalsIgnoreCase(line.trim()) || "quit".equalsIgnoreCase(line.trim())) {
                     break;
                 }
@@ -102,6 +104,7 @@ public class CliAgentEntry implements AgentEntry, ApplicationRunner, AgentEventH
             case AgentEvent.StatusChange ignored -> {
             }
         }
+        // Response 事件可能是文本增量，只有工具结果或错误这类完整行事件才主动 flush。
         if (event instanceof AgentEvent.Response response && response.content().endsWith("\n")) {
             return;
         }

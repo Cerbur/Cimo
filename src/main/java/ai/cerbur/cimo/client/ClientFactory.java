@@ -49,6 +49,7 @@ public class ClientFactory {
     private AnthropicChatModel createAnthropicChatModel() {
         validateAnthropicProperties();
         printAnthropicDebugConfigIfEnabled();
+        // 只有 provider=anthropic 时才构建 SDK model，避免未选中 provider 的配置缺失阻塞启动。
         AnthropicChatOptions.Builder options = AnthropicChatOptions.builder()
                 .apiKey(anthropicProperties.apiKey())
                 .model(anthropicProperties.model())

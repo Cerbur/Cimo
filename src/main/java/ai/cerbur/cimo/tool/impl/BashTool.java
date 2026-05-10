@@ -17,6 +17,9 @@ import org.springframework.stereotype.Component;
 import ai.cerbur.cimo.tool.Tool;
 import ai.cerbur.cimo.tool.ToolResult;
 
+/**
+ * Step 1 的受限 Bash 工具，只允许执行结构化的 echo 调用，用于跑通最小 tool_use 链路。
+ */
 @Component
 public class BashTool implements Tool {
 
@@ -52,6 +55,7 @@ public class BashTool implements Tool {
             return new ToolResult(false, "", "Command is not allowed: " + command, null);
         }
 
+        // 使用 ProcessBuilder 参数数组传参，不接收整条 shell 字符串，降低 Step 1 的命令注入面。
         List<String> processCommand = new ArrayList<>();
         processCommand.add(ALLOWED_COMMAND);
         JsonNode args = arguments.path("args");
@@ -86,6 +90,7 @@ public class BashTool implements Tool {
         ObjectNode root = objectMapper.createObjectNode();
         root.put("type", "object");
 
+        // schema 与 ALLOWED_COMMAND 保持同源，避免模型看到的能力大于实际白名单。
         ObjectNode propertiesNode = objectMapper.createObjectNode();
         ObjectNode command = objectMapper.createObjectNode();
         command.put("type", "string");

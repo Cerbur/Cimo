@@ -27,6 +27,9 @@ import ai.cerbur.cimo.client.model.StreamEvent;
 import ai.cerbur.cimo.tool.Tool;
 import reactor.core.publisher.Flux;
 
+/**
+ * 基于 Spring AI AnthropicChatModel 的 provider adapter，负责在 Cimo 消息模型和 Spring AI 消息模型之间转换。
+ */
 public class SpringAiAnthropicClient implements Client {
 
     private final AnthropicChatModel chatModel;
@@ -80,6 +83,7 @@ public class SpringAiAnthropicClient implements Client {
                     .build();
         }
 
+        // Cimo 将工具结果存成 user turn，但 Spring AI/Anthropic 需要专门的 tool response message。
         if (message.content().stream().allMatch(ContentBlock.ToolResult.class::isInstance)) {
             List<ToolResponseMessage.ToolResponse> responses = message.content()
                     .stream()
@@ -101,6 +105,7 @@ public class SpringAiAnthropicClient implements Client {
     private AnthropicChatOptions toAnthropicOptions(ClientRequest request) {
         return AnthropicChatOptions.builder()
                 .maxTokens(maxTokens)
+                // 工具执行必须留在 Cimo AgentLoop 中，不能让 Spring AI 自动吞掉 tool_use/tool_result 协议。
                 .internalToolExecutionEnabled(false)
                 .disableParallelToolUse(true)
                 .toolCallbacks(request.tools().stream().map(this::toToolCallback).toList())
@@ -120,6 +125,7 @@ public class SpringAiAnthropicClient implements Client {
 
             @Override
             public String call(String toolInput) {
+                // 这个 callback 只用于把 schema 暴露给模型；真正执行路径在 DefaultAgentLoop。
                 throw new UnsupportedOperationException("Cimo AgentLoop executes tools explicitly.");
             }
         };
@@ -130,6 +136,7 @@ public class SpringAiAnthropicClient implements Client {
         if (assistantMessage.getText() != null && !assistantMessage.getText().isBlank()) {
             events.add(StreamEvent.textDelta(assistantMessage.getText()));
         }
+        // Spring AI 已经聚合出完整 tool call，当前 Step 1 只向上游暴露 TOOL_USE_END。
         for (AssistantMessage.ToolCall toolCall : assistantMessage.getToolCalls()) {
             events.add(StreamEvent.toolUseEnd(toToolCallNode(toolCall)));
         }

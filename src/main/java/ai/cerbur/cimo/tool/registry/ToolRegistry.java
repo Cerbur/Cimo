@@ -11,6 +11,9 @@ import org.springframework.stereotype.Component;
 
 import ai.cerbur.cimo.tool.Tool;
 
+/**
+ * Agent 可见工具注册表，由 Spring 收集当前启用的 Tool Bean，并按工具名提供查询。
+ */
 @Component
 public class ToolRegistry {
 
