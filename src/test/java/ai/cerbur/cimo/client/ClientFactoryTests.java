@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -67,7 +68,7 @@ class ClientFactoryTests {
 
     @Test
     void openAiProviderDoesNotValidateAnthropicSettings() {
-        Client client = new ClientFactory(
+        Client client = clientFactory(
                 cimoProperties("openai", false),
                 new AnthropicProperties("", "", "", 0),
                 objectMapper)
@@ -124,10 +125,21 @@ class ClientFactoryTests {
     }
 
     private ClientFactory anthropicFactory(String apiKey, String model, String baseUrl, boolean debug) {
-        return new ClientFactory(
+        return clientFactory(
                 cimoProperties("anthropic", debug),
                 new AnthropicProperties(apiKey, model, baseUrl, 4096),
                 objectMapper);
+    }
+
+    private ClientFactory clientFactory(
+            CimoProperties cimoProperties,
+            AnthropicProperties anthropicProperties,
+            ObjectMapper objectMapper) {
+        ClientFactory factory = new ClientFactory();
+        ReflectionTestUtils.setField(factory, "cimoProperties", cimoProperties);
+        ReflectionTestUtils.setField(factory, "anthropicProperties", anthropicProperties);
+        ReflectionTestUtils.setField(factory, "objectMapper", objectMapper);
+        return factory;
     }
 
     private CimoProperties cimoProperties(String provider, boolean debug) {

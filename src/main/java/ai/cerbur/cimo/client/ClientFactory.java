@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.springframework.ai.anthropic.AnthropicChatModel;
 import org.springframework.ai.anthropic.AnthropicChatOptions;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import ai.cerbur.cimo.client.anthropic.SpringAiAnthropicClient;
@@ -14,22 +15,24 @@ import ai.cerbur.cimo.client.openai.OpenAiClient;
 import ai.cerbur.cimo.config.AnthropicProperties;
 import ai.cerbur.cimo.config.CimoProperties;
 
+/**
+ * 根据 Cimo 全局 provider 配置创建唯一需要的 LLM client，避免未选中的 provider 过早初始化。
+ */
 @Component
 public class ClientFactory {
 
-    private final CimoProperties cimoProperties;
-    private final AnthropicProperties anthropicProperties;
-    private final ObjectMapper objectMapper;
+    @Autowired
+    private CimoProperties cimoProperties;
 
-    public ClientFactory(
-            CimoProperties cimoProperties,
-            AnthropicProperties anthropicProperties,
-            ObjectMapper objectMapper) {
-        this.cimoProperties = cimoProperties;
-        this.anthropicProperties = anthropicProperties;
-        this.objectMapper = objectMapper;
-    }
+    @Autowired
+    private AnthropicProperties anthropicProperties;
 
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    /**
+     * 按当前配置选择并创建 provider client；未选中的 provider 不参与校验和 SDK client 创建。
+     */
     public Client createClient() {
         if ("anthropic".equals(cimoProperties.provider())) {
             return new SpringAiAnthropicClient(

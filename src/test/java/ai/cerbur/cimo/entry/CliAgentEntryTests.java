@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -57,14 +58,15 @@ class CliAgentEntryTests {
     }
 
     private CliAgentEntry entry(boolean debug) {
-        return new CliAgentEntry(
-                new NoopAgentLoop(),
-                new CimoProperties(
-                        "anthropic",
-                        debug,
-                        System.getProperty("user.dir"),
-                        5),
-                new ToolRegistry(List.of()));
+        CliAgentEntry entry = new CliAgentEntry();
+        ReflectionTestUtils.setField(entry, "agentLoop", new NoopAgentLoop());
+        ReflectionTestUtils.setField(entry, "cimoProperties", new CimoProperties(
+                "anthropic",
+                debug,
+                System.getProperty("user.dir"),
+                5));
+        ReflectionTestUtils.setField(entry, "toolRegistry", new ToolRegistry(List.of()));
+        return entry;
     }
 
     private JsonNode bashEchoArguments(String text) {

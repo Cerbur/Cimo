@@ -12,6 +12,7 @@ import org.jline.reader.LineReaderBuilder;
 import org.jline.reader.UserInterruptException;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -25,22 +26,21 @@ import ai.cerbur.cimo.entry.event.AgentEventHandler;
 import ai.cerbur.cimo.prompt.CimoPrompts;
 import ai.cerbur.cimo.tool.registry.ToolRegistry;
 
+/**
+ * JLine CLI 入口，负责启动自然语言 REPL，并把 Agent 事件转换成人类可读的终端输出。
+ */
 @Component
 @ConditionalOnProperty(prefix = "cimo.cli", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class CliAgentEntry implements AgentEntry, ApplicationRunner, AgentEventHandler {
 
-    private final AgentLoop agentLoop;
-    private final CimoProperties cimoProperties;
-    private final ToolRegistry toolRegistry;
+    @Autowired
+    private AgentLoop agentLoop;
 
-    public CliAgentEntry(
-            AgentLoop agentLoop,
-            CimoProperties cimoProperties,
-            ToolRegistry toolRegistry) {
-        this.agentLoop = agentLoop;
-        this.cimoProperties = cimoProperties;
-        this.toolRegistry = toolRegistry;
-    }
+    @Autowired
+    private CimoProperties cimoProperties;
+
+    @Autowired
+    private ToolRegistry toolRegistry;
 
     @Override
     public void run(ApplicationArguments args) {
