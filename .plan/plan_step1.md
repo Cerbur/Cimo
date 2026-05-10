@@ -414,7 +414,7 @@ $ ./gradlew bootRun
 - [x] S1-34 Anthropic 配置 debug 输出：`application.yaml` 增加全局 `cimo.debug: false`；`ClientFactory` 在具体 debug 输出逻辑需要时读取该全局开关，并在 `validateAnthropicProperties()` 之后根据该开关打印 Anthropic 配置信息到 CLI；`AnthropicProperties` 不承载 debug 字段。验收标准：`debug=false` 时不输出配置；`debug=true` 时输出 `model/baseUrl/maxTokens/debug` 等可排查信息；`apiKey` 必须脱敏，不能完整打印。（完成时间：2026-05-10 03:27 CST，Git Commit: 未提交；2026-05-10 后续修正：读取方式由 S1-36 改为显式注入 `CimoProperties`，不再使用 `SpringEnvironmentReader`）
 - [x] S1-35 CLI Tool 事件输出收口：默认模式不打印 provider 原始 `tool_use` JSON 或完整 `tool_result` 原始数据；原始协议内容仅在 `cimo.debug=true` 时输出。默认 `ToolCall` 展示为人类可读摘要，例如 `Tool: bash echo hello`；默认 `ToolResult` 展示带工具来源，例如 `Result: bash: hello`。补充测试覆盖：`debug=false` 不出现 `{"command":"echo","args":["hello"]}` 这类原始 JSON；`debug=true` 输出原始 tool use 诊断信息；结果展示包含工具名上下文。（完成时间：2026-05-11 01:59 CST，Git Commit: 4641b50）
 - [x] S1-36 实现 `CimoProperties` 替代 `SpringEnvironmentReader` 的配置读取逻辑：重新定义 `ai.cerbur.cimo.config.CimoProperties` 作为 `cimo` 一级运行配置绑定对象，承载 `provider`、`debug`、`work-dir`、`agent.max-tool-rounds` 等 Cimo 自身配置；删除 `SpringEnvironmentReader` 的静态 `Environment` 读取方式；`ClientFactory`、入口/上下文构建链路改为读取显式注入的 `CimoProperties`。边界：`AnthropicProperties` / `OpenAiProperties` 继续承载 provider-specific 配置；Bash timeout 继续保留在工具窄配置；Bash allowed commands 不配置化。验收：配置绑定测试覆盖默认值和 `cimo.debug` / `cimo.provider` / `cimo.work-dir` / `cimo.agent.max-tool-rounds`；原有 Anthropic 配置校验和非选中 provider 不触发校验的测试通过。（完成时间：2026-05-11 01:59 CST，Git Commit: 4641b50）
-- [x] S1-37 按 `@Autowired` 成员变量注入规范重新梳理代码：除构造器中存在真实初始化逻辑、派生对象创建或校验逻辑的类外，Spring Bean 依赖统一改为成员变量上的 `@Autowired` 显式注入，不再用构造器只做字段赋值。明确例外：`DefaultAgentLoop` 当前 `DefaultAgentLoop(ClientFactory clientFactory)` 中调用 `clientFactory.createClient()` 并保存 `Client`，属于构造器内有逻辑处理，可以保留构造器注入。验收标准：检查所有 `@Component` / `@Configuration` / `@Service` 等 Spring 管理类；调整测试构造方式；确保 `./gradlew test` 通过。（完成时间：2026-05-11 02:13 CST，Git Commit: e00df9a）
+- [x] S1-37 按 `@Autowired` 成员变量注入规范重新梳理代码：除构造器中存在真实初始化逻辑、派生对象创建或校验逻辑的类外，Spring Bean 依赖统一改为成员变量上的 `@Autowired` 显式注入，不再用构造器只做字段赋值。明确例外：`DefaultAgentLoop` 当前 `DefaultAgentLoop(ClientFactory clientFactory)` 中调用 `clientFactory.createClient()` 并保存 `Client`，属于构造器内有逻辑处理，可以保留构造器注入。验收标准：检查所有 `@Component` / `@Configuration` / `@Service` 等 Spring 管理类；调整测试构造方式；确保 `./gradlew test` 通过。（完成时间：2026-05-11 02:13 CST，Git Commit: 4663fb7）
 
 ---
 
@@ -449,7 +449,7 @@ $ ./gradlew bootRun
 | 2026-05-10 03:27 CST | S1-34 Anthropic 配置 debug 输出：新增全局 `cimo.debug` 开关，校验通过后按需打印 `model/baseUrl/maxTokens/debug` 和脱敏后的 `apiKey`；当时通过 `SpringEnvironmentReader` 从 Spring `Environment` 读取开关；2026-05-10 后续修正为通过 `CimoProperties` 显式注入读取，见 S1-36 | 未提交 |
 | 2026-05-11 01:52 CST | S1-23 真实 Anthropic 端到端验证：`通过bash输出hello` 触发 `bash echo` tool call，BashTool 返回结果包含 `hello`；CLI stdin 在当前工具环境中会被 JLine 读成 EOF，因此验证改为关闭 CLI runner 后调用真实 Spring `AgentLoop + Anthropic + BashTool` 链路 | 5142e45 |
 | 2026-05-11 01:59 CST | S1-35 / S1-36：CLI Tool 默认输出改为人类可读摘要，debug 模式才附带原始 tool 参数；重新引入 `CimoProperties` 作为 Cimo 一级配置对象，并删除 `SpringEnvironmentReader` 静态读取链路；补充 CLI 输出、配置绑定和 ClientFactory debug 测试 | 4641b50 |
-| 2026-05-11 02:13 CST | S1-37 Spring 注入风格收口：`ClientFactory`、`CliAgentEntry` 改为成员变量 `@Autowired` 注入；保留存在派生对象创建或初始化逻辑的构造器；同步调整测试构造方式；`./gradlew test` 通过 | e00df9a |
+| 2026-05-11 02:13 CST | S1-37 Spring 注入风格收口：`ClientFactory`、`CliAgentEntry` 改为成员变量 `@Autowired` 注入；保留存在派生对象创建或初始化逻辑的构造器；同步调整测试构造方式；`./gradlew test` 通过 | 4663fb7 |
 
 ## 决策记录
 
