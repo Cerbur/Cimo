@@ -16,6 +16,7 @@
 - 当前详细计划：[plan_step2.md](plan_step2.md)
 - Step 1 完成时间：2026-05-11 03:37 CST
 - Step 1 对应 Git Commit：24062a7
+- Step 1 归档状态：Done，只读归档；除补充完成记录勘误外不得继续更新 todo 或改写计划内容
 - 计划目录化完成时间：2026-05-09 16:30 CST
 - 对应 Git Commit：5e6875f
 
@@ -25,7 +26,7 @@
 
 | Step | 内容 | 详细计划 | 状态 |
 |------|------|----------|------|
-| Step 1 | CLI Agent Loop + Anthropic + BashTool | [plan_step1.md](plan_step1.md) | 已完成 |
+| Step 1 | CLI Agent Loop + Anthropic + BashTool | [plan_step1.md](plan_step1.md) | Done / Archived / Read-only |
 | Step 2 | 更多工具集，例如 Read / Write / Edit / Glob；CLI 内置指令识别与分发 | [plan_step2.md](plan_step2.md) | 规划中 |
 | Step 3 | Session 管理 + 消息历史持久化 | 待创建 | 未开始 |
 | Step 4 | Harness 管理层 + REST API | 待创建 | 未开始 |
@@ -44,6 +45,8 @@
 
 - `plan_main.md` 只维护全局入口、阶段状态、跨阶段决策索引和分步计划链接。
 - `plan_stepN.md` 维护对应阶段的目标、任务拆解、验收标准、执行决策、完成记录和决策记录。
+- 新建 `plan_stepN.md` 时优先从 [plan_template.md](plan_template.md) 生成，必须保留 Todo ID、状态、验收标准和 ADR-lite 决策记录。
+- 状态为 `Done / Archived / Read-only` 的 step 视为已归档，只允许阅读；除完成记录勘误、commit ID 补全等历史修正外，不得继续更新 todo、追加新范围或改写计划内容。
 - 当某个 `plan_stepN.md` 过大时，优先按阶段或主题继续拆分，并在本文件保留索引。
 - 根目录不再新增 `plan.md`；历史 `plan.md` 已迁移为 [plan_step1.md](plan_step1.md)。
 
@@ -59,3 +62,4 @@
 | 2026-05-10 CST | Spring Bean 注入规范：除构造器中存在真实初始化逻辑、派生对象创建或校验逻辑外，统一使用成员变量 `@Autowired` 显式注入；`DefaultAgentLoop` 当前构造器创建 `Client` 属于例外。 | [plan_step1.md](plan_step1.md) |
 | 2026-05-11 02:19 CST | Step 1 新增 S1-38 注释补充任务：按 AGENTS.md 注释质量要求，只补 public 类型职责、核心流程、关键约束和状态流转说明；不做机械注释、不改变行为。 | [plan_step1.md](plan_step1.md) |
 | 2026-05-11 03:35 CST | 新增跨阶段 QA 计划：先记录契约测试、替身端到端、CLI 黑盒、真实 provider smoke、安全边界、架构约束和 Plan QA 的候选方向；不把普通单测或覆盖率作为默认目标；暂不进入编码。 | [plan_qa.md](plan_qa.md) |
+| 2026-05-11 CST | 引入 plan 模板；后续 step 计划必须使用 Todo ID、状态、验收标准和 ADR-lite 记录；Step 1 标记为 Done / Archived / Read-only。 | 本文件 / [plan_template.md](plan_template.md) |
