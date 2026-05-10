@@ -4,28 +4,21 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
-import org.springframework.mock.env.MockEnvironment;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import ai.cerbur.cimo.client.openai.OpenAiClient;
 import ai.cerbur.cimo.config.AnthropicProperties;
-import ai.cerbur.cimo.config.SpringEnvironmentReader;
+import ai.cerbur.cimo.config.CimoProperties;
 
 @ExtendWith(OutputCaptureExtension.class)
 class ClientFactoryTests {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-
-    @AfterEach
-    void clearEnvironment() {
-        SpringEnvironmentReader.useEnvironmentForTests(null);
-    }
 
     @Test
     void anthropicProviderRequiresApiKey() {
@@ -75,7 +68,7 @@ class ClientFactoryTests {
     @Test
     void openAiProviderDoesNotValidateAnthropicSettings() {
         Client client = new ClientFactory(
-                "openai",
+                cimoProperties("openai", false),
                 new AnthropicProperties("", "", "", 0),
                 objectMapper)
                 .createClient();
@@ -131,11 +124,17 @@ class ClientFactoryTests {
     }
 
     private ClientFactory anthropicFactory(String apiKey, String model, String baseUrl, boolean debug) {
-        SpringEnvironmentReader.useEnvironmentForTests(
-                new MockEnvironment().withProperty("cimo.debug", Boolean.toString(debug)));
         return new ClientFactory(
-                "anthropic",
+                cimoProperties("anthropic", debug),
                 new AnthropicProperties(apiKey, model, baseUrl, 4096),
                 objectMapper);
+    }
+
+    private CimoProperties cimoProperties(String provider, boolean debug) {
+        return new CimoProperties(
+                provider,
+                debug,
+                System.getProperty("user.dir"),
+                5);
     }
 }

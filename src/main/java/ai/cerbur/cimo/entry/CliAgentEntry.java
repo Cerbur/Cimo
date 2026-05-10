@@ -1,6 +1,10 @@
 package ai.cerbur.cimo.entry;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
+import com.fasterxml.jackson.databind.JsonNode;
 
 import org.jline.reader.EndOfFileException;
 import org.jline.reader.LineReader;
@@ -11,11 +15,11 @@ import org.jline.terminal.TerminalBuilder;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import ai.cerbur.cimo.agent.AgentContext;
 import ai.cerbur.cimo.agent.AgentLoop;
+import ai.cerbur.cimo.config.CimoProperties;
 import ai.cerbur.cimo.entry.event.AgentEvent;
 import ai.cerbur.cimo.entry.event.AgentEventHandler;
 import ai.cerbur.cimo.prompt.CimoPrompts;
@@ -26,18 +30,15 @@ import ai.cerbur.cimo.tool.registry.ToolRegistry;
 public class CliAgentEntry implements AgentEntry, ApplicationRunner, AgentEventHandler {
 
     private final AgentLoop agentLoop;
-    private final String workDir;
-    private final int maxToolRounds;
+    private final CimoProperties cimoProperties;
     private final ToolRegistry toolRegistry;
 
     public CliAgentEntry(
             AgentLoop agentLoop,
-            @Value("${cimo.work-dir:${user.dir}}") String workDir,
-            @Value("${cimo.agent.max-tool-rounds:5}") int maxToolRounds,
+            CimoProperties cimoProperties,
             ToolRegistry toolRegistry) {
         this.agentLoop = agentLoop;
-        this.workDir = normalizeWorkDir(workDir);
-        this.maxToolRounds = normalizeMaxToolRounds(maxToolRounds);
+        this.cimoProperties = cimoProperties;
         this.toolRegistry = toolRegistry;
     }
 
@@ -49,10 +50,10 @@ public class CliAgentEntry implements AgentEntry, ApplicationRunner, AgentEventH
     @Override
     public void start() {
         agentLoop.start(new AgentContext(
-                workDir,
+                cimoProperties.workDir(),
                 CimoPrompts.STEP_1_SYSTEM_PROMPT,
                 toolRegistry,
-                maxToolRounds), this);
+                cimoProperties.maxToolRounds()), this);
         printBanner();
         try (Terminal terminal = TerminalBuilder.builder().system(true).build()) {
             LineReader reader = LineReaderBuilder.builder().terminal(terminal).build();
@@ -94,8 +95,8 @@ public class CliAgentEntry implements AgentEntry, ApplicationRunner, AgentEventH
     public void onEvent(AgentEvent event) {
         switch (event) {
             case AgentEvent.Thinking thinking -> System.out.println("Thinking: " + thinking.message());
-            case AgentEvent.ToolCall toolCall -> System.out.println("Tool: " + toolCall.toolName() + " " + toolCall.args());
-            case AgentEvent.ToolResult toolResult -> System.out.println("Result: " + toolResult.result());
+            case AgentEvent.ToolCall toolCall -> System.out.println(formatToolCall(toolCall));
+            case AgentEvent.ToolResult toolResult -> System.out.println(formatToolResult(toolResult));
             case AgentEvent.Response response -> System.out.print(response.content());
             case AgentEvent.Error error -> System.out.println("Error: " + error.message());
             case AgentEvent.StatusChange ignored -> {
@@ -117,14 +118,37 @@ public class CliAgentEntry implements AgentEntry, ApplicationRunner, AgentEventH
                 """);
     }
 
-    private static String normalizeWorkDir(String workDir) {
-        if (workDir == null || workDir.isBlank()) {
-            return System.getProperty("user.dir");
+    private String formatToolCall(AgentEvent.ToolCall toolCall) {
+        String summary = "Tool: " + toolCall.toolName() + formatToolArguments(toolCall.args());
+        if (!cimoProperties.debug()) {
+            return summary;
         }
-        return workDir;
+        return summary + " (raw: " + toolCall.args() + ")";
     }
 
-    private static int normalizeMaxToolRounds(int maxToolRounds) {
-        return maxToolRounds <= 0 ? 5 : maxToolRounds;
+    private String formatToolResult(AgentEvent.ToolResult toolResult) {
+        return "Result: " + toolResult.toolName() + ": " + toolResult.result();
+    }
+
+    /**
+     * 默认 CLI 输出面向用户，只把 Step 1 的结构化 bash 参数压缩成人类可读命令摘要。
+     */
+    private static String formatToolArguments(JsonNode args) {
+        if (args == null || args.isNull()) {
+            return "";
+        }
+        String command = args.path("command").asText("");
+        if (command.isBlank()) {
+            return "";
+        }
+        List<String> parts = new ArrayList<>();
+        parts.add(command);
+        JsonNode commandArgs = args.path("args");
+        if (commandArgs.isArray()) {
+            for (JsonNode commandArg : commandArgs) {
+                parts.add(commandArg.asText());
+            }
+        }
+        return " " + String.join(" ", parts);
     }
 }

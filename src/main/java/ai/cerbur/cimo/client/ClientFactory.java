@@ -7,41 +7,40 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.springframework.ai.anthropic.AnthropicChatModel;
 import org.springframework.ai.anthropic.AnthropicChatOptions;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import ai.cerbur.cimo.client.anthropic.SpringAiAnthropicClient;
 import ai.cerbur.cimo.client.openai.OpenAiClient;
 import ai.cerbur.cimo.config.AnthropicProperties;
-import ai.cerbur.cimo.config.SpringEnvironmentReader;
+import ai.cerbur.cimo.config.CimoProperties;
 
 @Component
 public class ClientFactory {
 
-    private final String provider;
+    private final CimoProperties cimoProperties;
     private final AnthropicProperties anthropicProperties;
     private final ObjectMapper objectMapper;
 
     public ClientFactory(
-            @Value("${cimo.provider:anthropic}") String provider,
+            CimoProperties cimoProperties,
             AnthropicProperties anthropicProperties,
             ObjectMapper objectMapper) {
-        this.provider = normalizeProvider(provider);
+        this.cimoProperties = cimoProperties;
         this.anthropicProperties = anthropicProperties;
         this.objectMapper = objectMapper;
     }
 
     public Client createClient() {
-        if ("anthropic".equals(provider)) {
+        if ("anthropic".equals(cimoProperties.provider())) {
             return new SpringAiAnthropicClient(
                     createAnthropicChatModel(),
                     objectMapper,
                     anthropicProperties.maxTokens());
         }
-        if ("openai".equals(provider)) {
+        if ("openai".equals(cimoProperties.provider())) {
             return new OpenAiClient();
         }
-        throw new IllegalArgumentException("Unsupported provider: " + provider);
+        throw new IllegalArgumentException("Unsupported provider: " + cimoProperties.provider());
     }
 
     private AnthropicChatModel createAnthropicChatModel() {
@@ -67,15 +66,14 @@ public class ClientFactory {
      * 在全局调试开关打开时打印已绑定的 Anthropic 配置，帮助确认 CLI 启动时实际读取到的值。
      */
     private void printAnthropicDebugConfigIfEnabled() {
-        boolean debug = SpringEnvironmentReader.getBoolean("cimo.debug", false);
-        if (!debug) {
+        if (!cimoProperties.debug()) {
             return;
         }
         System.out.println("Anthropic config: "
                 + "model=" + anthropicProperties.model()
                 + ", baseUrl=" + anthropicProperties.baseUrl()
                 + ", maxTokens=" + anthropicProperties.maxTokens()
-                + ", debug=" + debug
+                + ", debug=" + cimoProperties.debug()
                 + ", apiKey=" + maskApiKey(anthropicProperties.apiKey()));
     }
 
@@ -117,10 +115,4 @@ public class ClientFactory {
         }
     }
 
-    private static String normalizeProvider(String provider) {
-        if (provider == null || provider.isBlank()) {
-            return "anthropic";
-        }
-        return provider.trim().toLowerCase();
-    }
 }
