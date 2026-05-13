@@ -2,16 +2,20 @@ package ai.cerbur.cimo.tool.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.nio.file.Path;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import org.junit.jupiter.api.Test;
 
+import ai.cerbur.cimo.tool.ToolExecutionContext;
 import ai.cerbur.cimo.tool.ToolResult;
 
 class BashToolTests {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ToolExecutionContext context = new ToolExecutionContext(Path.of(System.getProperty("user.dir")));
 
     @Test
     void schemaOnlyAllowsEcho() {
@@ -38,7 +42,7 @@ class BashToolTests {
         arguments.put("command", "pwd");
         arguments.putArray("args");
 
-        ToolResult result = tool.execute(arguments);
+        ToolResult result = tool.execute(context, arguments);
 
         assertThat(result.success()).isFalse();
         assertThat(result.error()).isEqualTo("Command is not allowed: pwd");
@@ -51,7 +55,7 @@ class BashToolTests {
         arguments.put("command", "echo");
         arguments.putArray("args").add("hello");
 
-        ToolResult result = tool.execute(arguments);
+        ToolResult result = tool.execute(context, arguments);
 
         assertThat(result.success()).isTrue();
         assertThat(result.output()).isEqualTo("hello");

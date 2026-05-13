@@ -12,5 +12,5 @@ public interface Tool {
 
     JsonNode getParameterSchema();
 
-    ToolResult execute(JsonNode arguments);
+    ToolResult execute(ToolExecutionContext context, JsonNode arguments);
 }

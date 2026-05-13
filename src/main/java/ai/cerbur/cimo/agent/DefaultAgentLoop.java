@@ -1,5 +1,6 @@
 package ai.cerbur.cimo.agent;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -18,6 +19,7 @@ import ai.cerbur.cimo.client.model.StreamEventType;
 import ai.cerbur.cimo.entry.event.AgentEvent;
 import ai.cerbur.cimo.entry.event.AgentEventHandler;
 import ai.cerbur.cimo.tool.Tool;
+import ai.cerbur.cimo.tool.ToolExecutionContext;
 import ai.cerbur.cimo.tool.ToolResult;
 
 /**
@@ -29,6 +31,7 @@ public class DefaultAgentLoop implements AgentLoop {
     private final Client client;
     private final MessageHistory history = new MessageHistory();
     private AgentContext context;
+    private ToolExecutionContext toolExecutionContext;
     private AgentEventHandler handler;
 
     public DefaultAgentLoop(ClientFactory clientFactory) {
@@ -38,6 +41,7 @@ public class DefaultAgentLoop implements AgentLoop {
     @Override
     public void start(AgentContext context, AgentEventHandler handler) {
         this.context = Objects.requireNonNull(context, "context");
+        this.toolExecutionContext = new ToolExecutionContext(Path.of(this.context.workingDirectory()));
         this.handler = Objects.requireNonNull(handler, "handler");
     }
 
@@ -63,7 +67,7 @@ public class DefaultAgentLoop implements AgentLoop {
                 emit(new AgentEvent.ToolCall(toolUse.name(), toolUse.input()));
                 Tool tool = context.toolRegistry().getTool(toolUse.name())
                         .orElseThrow(() -> new IllegalArgumentException("Unknown tool: " + toolUse.name()));
-                ToolResult result = tool.execute(toolUse.input());
+                ToolResult result = tool.execute(toolExecutionContext, toolUse.input());
                 String content = result.success() ? result.output() : result.error();
                 emit(new AgentEvent.ToolResult(toolUse.name(), content));
                 // toolUseId 必须沿用模型给出的 id，否则 provider 无法把结果关联回对应 tool_use。

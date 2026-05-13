@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import ai.cerbur.cimo.tool.Tool;
+import ai.cerbur.cimo.tool.ToolExecutionContext;
 import ai.cerbur.cimo.tool.ToolResult;
 
 /**
@@ -49,7 +50,7 @@ public class BashTool implements Tool {
     }
 
     @Override
-    public ToolResult execute(JsonNode arguments) {
+    public ToolResult execute(ToolExecutionContext context, JsonNode arguments) {
         String command = arguments.path("command").asText("");
         if (!ALLOWED_COMMAND.equals(command)) {
             return new ToolResult(false, "", "Command is not allowed: " + command, null);
@@ -64,6 +65,7 @@ public class BashTool implements Tool {
         }
 
         ProcessBuilder processBuilder = new ProcessBuilder(processCommand);
+        processBuilder.directory(context.workingDirectory().toFile());
         try {
             Process process = processBuilder.start();
             boolean completed = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
