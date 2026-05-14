@@ -98,6 +98,25 @@ public class FileToolSecurity {
         validateSafePath(path);
     }
 
+    /**
+     * 校验内容搜索候选必须是普通 UTF-8 文本文件；搜索工具自行负责流式读取和输出截断。
+     */
+    public void validateSearchableTextFile(Path path) {
+        validateSafePath(path);
+        if (!Files.exists(path)) {
+            throw new FileToolSecurityException("File does not exist for search: " + path);
+        }
+        if (Files.isDirectory(path)) {
+            throw new FileToolSecurityException("Directory is not allowed as search file candidate: " + path);
+        }
+        if (!Files.isRegularFile(path)) {
+            throw new FileToolSecurityException("Only regular files are allowed for search: " + path);
+        }
+        if (hasBinaryExtension(path) || looksBinary(path)) {
+            throw new FileToolSecurityException("Binary file is not allowed for search: " + path);
+        }
+    }
+
     private Path normalizeExistingWorkspace(Path workingDirectory) {
         try {
             if (Files.exists(workingDirectory)) {
