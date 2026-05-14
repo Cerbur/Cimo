@@ -10,6 +10,8 @@ import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Set;
 
+import org.springframework.stereotype.Component;
+
 import ai.cerbur.cimo.tool.ToolExecutionContext;
 
 /**
@@ -18,6 +20,7 @@ import ai.cerbur.cimo.tool.ToolExecutionContext;
  * <p>这个类不承担具体 read/write/edit/search 行为，只把所有文件工具必须遵守的
  * 共同约束固化为可测试 API，避免后续每个工具各自实现一套略有差异的校验。
  */
+@Component
 public class FileToolSecurity {
 
     public static final long READ_MAX_BYTES = 200L * 1024L;
@@ -165,8 +168,7 @@ public class FileToolSecurity {
                     || segment.startsWith(".env.")
                     || segment.contains("secret")
                     || segment.contains("credential")
-                    || segment.contains("token")
-                    || segment.contains("private")) {
+                    || segment.contains("token")) {
                 return true;
             }
         }
