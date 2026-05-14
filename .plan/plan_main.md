@@ -39,6 +39,8 @@
 | 计划 | 内容 | 详细计划 | 状态 |
 |------|------|----------|------|
 | QA | 自动化 QA 策略、风险地图、候选测试分层与后续质量门禁 | [plan_qa.md](plan_qa.md) | 规划中 |
+| Agent Process | 代理工作流程、Plan 组织规则、执行门禁 | [agent_process.md](agent_process.md) | 生效 |
+| Engineering Rules | 长期工程规范、代码约定、架构约束 | [engineering_rules.md](engineering_rules.md) | 生效 |
 
 ---
 
@@ -46,6 +48,8 @@
 
 - `plan_main.md` 只维护全局入口、阶段状态、跨阶段决策索引和分步计划链接。
 - `plan_stepN.md` 维护对应阶段的目标、任务拆解、验收标准、执行决策、完成记录和决策记录。
+- `agent_process.md` 维护代理工作流程、Plan 组织规则、执行门禁和 QA 门禁。
+- `engineering_rules.md` 维护长期工程规范，避免 `AGENTS.md` 承载过多细节。
 - 新建 `plan_stepN.md` 时优先从 [plan_template.md](plan_template.md) 生成，必须保留 Todo ID、状态、验收标准和 ADR-lite 决策记录。
 - 状态为 `Done / Archived / Read-only` 的 step 视为已归档，只允许阅读；除完成记录勘误、commit ID 补全等历史修正外，不得继续更新 todo、追加新范围或改写计划内容。
 - 当某个 `plan_stepN.md` 过大时，优先按阶段或主题继续拆分，并在本文件保留索引。
@@ -66,3 +70,4 @@
 | 2026-05-11 02:19 CST | Step 1 新增 S1-38 注释补充任务：按 AGENTS.md 注释质量要求，只补 public 类型职责、核心流程、关键约束和状态流转说明；不做机械注释、不改变行为。 | [plan_step1.md](plan_step1.md) |
 | 2026-05-11 03:35 CST | 新增跨阶段 QA 计划：先记录契约测试、替身端到端、CLI 黑盒、真实 provider smoke、安全边界、架构约束和 Plan QA 的候选方向；不把普通单测或覆盖率作为默认目标；暂不进入编码。 | [plan_qa.md](plan_qa.md) |
 | 2026-05-11 CST | 引入 plan 模板；后续 step 计划必须使用 Todo ID、状态、验收标准和 ADR-lite 记录；Step 1 标记为 Done / Archived / Read-only。 | 本文件 / [plan_template.md](plan_template.md) |
+| 2026-05-14 22:16 CST | 拆分代理规则文档：`AGENTS.md` 收敛为入口硬约束和索引；详细流程迁移到 `agent_process.md`；工程规范迁移到 `engineering_rules.md`；现有约束只搬迁不删除。 | [../AGENTS.md](../AGENTS.md) / [agent_process.md](agent_process.md) / [engineering_rules.md](engineering_rules.md) |
