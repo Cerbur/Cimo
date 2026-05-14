@@ -53,6 +53,18 @@ class FileToolSecurityTests {
     }
 
     @Test
+    void rejectsMissingPathUnderSymlinkEscapingWorkspace() throws IOException {
+        Path outside = Files.createTempDirectory("cimo-outside-dir");
+        Path link = workspace.resolve("linked-dir");
+        Files.createSymbolicLink(link, outside);
+        ToolExecutionContext context = new ToolExecutionContext(workspace);
+
+        assertThatThrownBy(() -> security.resolveWorkspacePath(context, "linked-dir/new/file.txt"))
+                .isInstanceOf(FileToolSecurityException.class)
+                .hasMessageContaining("symlink");
+    }
+
+    @Test
     void rejectsSensitivePathForRead() throws IOException {
         Path env = Files.writeString(workspace.resolve(".env.local"), "TOKEN=value");
 
