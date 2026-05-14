@@ -181,6 +181,7 @@ public class FileToolSecurity {
     }
 
     private boolean isSensitivePath(Path path) {
+        int index = 0;
         for (Path part : path) {
             String segment = part.toString().toLowerCase(Locale.ROOT);
             if (".git".equals(segment)
@@ -190,15 +191,21 @@ public class FileToolSecurity {
                     || segment.startsWith(".env.")
                     || segment.contains("secret")
                     || segment.contains("credential")
-                    || segment.contains("token")) {
+                    || segment.contains("token")
+                    || isSensitivePrivateSegment(path, index, segment)) {
                 return true;
             }
+            index++;
         }
         String fileName = fileNameLower(path);
         return fileName.endsWith(".pem")
                 || fileName.endsWith(".key")
                 || fileName.endsWith(".p12")
                 || fileName.endsWith(".jks");
+    }
+
+    private boolean isSensitivePrivateSegment(Path path, int index, String segment) {
+        return segment.contains("private") && !(path.isAbsolute() && index == 0 && "private".equals(segment));
     }
 
     private boolean hasBinaryExtension(Path path) {

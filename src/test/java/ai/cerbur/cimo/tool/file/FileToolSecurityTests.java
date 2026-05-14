@@ -83,6 +83,25 @@ class FileToolSecurityTests {
     }
 
     @Test
+    void rejectsPrivatePathForEdit() throws IOException {
+        Path privateFile = Files.writeString(workspace.resolve("private-notes.txt"), "private");
+
+        assertThatThrownBy(() -> security.validateEditableTextFile(privateFile))
+                .isInstanceOf(FileToolSecurityException.class)
+                .hasMessageContaining("Sensitive path");
+    }
+
+    @Test
+    void rejectsExactPrivateSegmentInsideWorkspace() throws IOException {
+        Path privateDirectory = Files.createDirectories(workspace.resolve("private"));
+        Path privateFile = Files.writeString(privateDirectory.resolve("config.txt"), "private");
+
+        assertThatThrownBy(() -> security.validateEditableTextFile(privateFile))
+                .isInstanceOf(FileToolSecurityException.class)
+                .hasMessageContaining("Sensitive path");
+    }
+
+    @Test
     void rejectsBinaryFileByNulByte() throws IOException {
         Path binary = workspace.resolve("data.txt");
         Files.write(binary, new byte[] {65, 0, 66});
