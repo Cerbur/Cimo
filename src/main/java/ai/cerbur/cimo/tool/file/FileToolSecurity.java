@@ -131,9 +131,12 @@ public class FileToolSecurity {
 
     private void ensureExistingPathDoesNotEscapeWorkspace(Path workspace, Path candidate, String userPath) {
         if (!Files.exists(candidate)) {
-            Path parent = candidate.getParent();
-            if (parent != null && Files.exists(parent)) {
-                ensureRealPathStartsWithWorkspace(workspace, parent, userPath);
+            Path existingAncestor = candidate.getParent();
+            while (existingAncestor != null && !Files.exists(existingAncestor)) {
+                existingAncestor = existingAncestor.getParent();
+            }
+            if (existingAncestor != null) {
+                ensureRealPathStartsWithWorkspace(workspace, existingAncestor, userPath);
             }
             return;
         }
