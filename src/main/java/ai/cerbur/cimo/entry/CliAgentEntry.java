@@ -21,6 +21,8 @@ import org.springframework.stereotype.Component;
 import ai.cerbur.cimo.agent.AgentContext;
 import ai.cerbur.cimo.agent.AgentLoop;
 import ai.cerbur.cimo.config.CimoProperties;
+import ai.cerbur.cimo.entry.command.CliCommandHandler;
+import ai.cerbur.cimo.entry.command.CliCommandResult;
 import ai.cerbur.cimo.entry.event.AgentEvent;
 import ai.cerbur.cimo.entry.event.AgentEventHandler;
 import ai.cerbur.cimo.prompt.CimoPrompts;
@@ -41,6 +43,9 @@ public class CliAgentEntry implements AgentEntry, ApplicationRunner, AgentEventH
 
     @Autowired
     private ToolRegistry toolRegistry;
+
+    @Autowired
+    private CliCommandHandler cliCommandHandler;
 
     private boolean responseLineOpen;
 
@@ -70,11 +75,9 @@ public class CliAgentEntry implements AgentEntry, ApplicationRunner, AgentEventH
                 if (line == null || line.isBlank()) {
                     continue;
                 }
-                // Step 2 会把本地指令抽成 handler；这里先保留 Step 1 的兼容退出语义。
-                if ("exit".equalsIgnoreCase(line.trim()) || "quit".equalsIgnoreCase(line.trim())) {
+                if (!handleUserInput(line)) {
                     break;
                 }
-                submitInput(line);
             }
         }
         catch (IOException ex) {
@@ -82,6 +85,21 @@ public class CliAgentEntry implements AgentEntry, ApplicationRunner, AgentEventH
         }
         shutdown();
         System.out.println("Bye!");
+    }
+
+    /**
+     * 分发单条用户输入；本地指令在这里截断，自然语言输入继续交给 AgentLoop。
+     */
+    boolean handleUserInput(String input) {
+        CliCommandResult commandResult = cliCommandHandler.handle(input);
+        return switch (commandResult) {
+            case CliCommandResult.ExitRequested exitRequested -> false;
+            case CliCommandResult.Handled handled -> true;
+            case CliCommandResult.NotCommand notCommand -> {
+                submitInput(input);
+                yield true;
+            }
+        };
     }
 
     @Override

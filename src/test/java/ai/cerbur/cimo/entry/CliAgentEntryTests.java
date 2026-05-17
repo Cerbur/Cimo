@@ -20,6 +20,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import ai.cerbur.cimo.agent.AgentContext;
 import ai.cerbur.cimo.agent.AgentLoop;
 import ai.cerbur.cimo.config.CimoProperties;
+import ai.cerbur.cimo.entry.command.CliCommandHandler;
+import ai.cerbur.cimo.entry.command.ExitCliCommandHandler;
 import ai.cerbur.cimo.entry.event.AgentEvent;
 import ai.cerbur.cimo.entry.event.AgentEventHandler;
 import ai.cerbur.cimo.tool.registry.ToolRegistry;
@@ -98,15 +100,42 @@ class CliAgentEntryTests {
         }
     }
 
+    @Test
+    void exitCommandDoesNotEnterAgentLoop() {
+        RecordingAgentLoop agentLoop = new RecordingAgentLoop();
+        CliAgentEntry entry = entry(false, agentLoop, new ExitCliCommandHandler());
+
+        boolean keepRunning = entry.handleUserInput("exit");
+
+        assertThat(keepRunning).isFalse();
+        assertThat(agentLoop.inputs()).isEmpty();
+    }
+
+    @Test
+    void naturalLanguageInputEntersAgentLoop() {
+        RecordingAgentLoop agentLoop = new RecordingAgentLoop();
+        CliAgentEntry entry = entry(false, agentLoop, new ExitCliCommandHandler());
+
+        boolean keepRunning = entry.handleUserInput("please explain quit command");
+
+        assertThat(keepRunning).isTrue();
+        assertThat(agentLoop.inputs()).containsExactly("please explain quit command");
+    }
+
     private CliAgentEntry entry(boolean debug) {
+        return entry(debug, new NoopAgentLoop(), new ExitCliCommandHandler());
+    }
+
+    private CliAgentEntry entry(boolean debug, AgentLoop agentLoop, CliCommandHandler cliCommandHandler) {
         CliAgentEntry entry = new CliAgentEntry();
-        ReflectionTestUtils.setField(entry, "agentLoop", new NoopAgentLoop());
+        ReflectionTestUtils.setField(entry, "agentLoop", agentLoop);
         ReflectionTestUtils.setField(entry, "cimoProperties", new CimoProperties(
                 "anthropic",
                 debug,
                 System.getProperty("user.dir"),
                 5));
         ReflectionTestUtils.setField(entry, "toolRegistry", new ToolRegistry(List.of()));
+        ReflectionTestUtils.setField(entry, "cliCommandHandler", cliCommandHandler);
         return entry;
     }
 
@@ -158,6 +187,20 @@ class CliAgentEntryTests {
 
         @Override
         public void shutdown() {
+        }
+    }
+
+    private static class RecordingAgentLoop extends NoopAgentLoop {
+
+        private final List<String> inputs = new java.util.ArrayList<>();
+
+        @Override
+        public void processInput(String userInput) {
+            inputs.add(userInput);
+        }
+
+        private List<String> inputs() {
+            return inputs;
         }
     }
 }

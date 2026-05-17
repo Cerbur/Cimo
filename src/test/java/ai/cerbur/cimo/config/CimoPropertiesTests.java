@@ -20,7 +20,7 @@ class CimoPropertiesTests {
             assertThat(properties.provider()).isEqualTo("anthropic");
             assertThat(properties.debug()).isFalse();
             assertThat(properties.workDir()).isEqualTo(System.getProperty("user.dir"));
-            assertThat(properties.maxToolRounds()).isEqualTo(5);
+            assertThat(properties.maxToolRounds()).isEqualTo(100000);
         });
     }
 
