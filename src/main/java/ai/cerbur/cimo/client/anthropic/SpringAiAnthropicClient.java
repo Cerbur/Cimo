@@ -45,10 +45,13 @@ public class SpringAiAnthropicClient implements Client {
     @Override
     public Flux<StreamEvent> chatStream(ClientRequest request) {
         Prompt prompt = new Prompt(toSpringAiMessages(request), toAnthropicOptions(request));
-        return chatModel.stream(prompt)
-                .flatMapIterable(response -> response.getResults().stream()
-                        .flatMap(generation -> toStreamEvents(generation.getOutput()).stream())
-                        .toList())
+        return Flux.defer(() -> {
+            SpringAiStreamEventAdapter adapter = new SpringAiStreamEventAdapter(objectMapper);
+            return chatModel.stream(prompt)
+                    .flatMapIterable(response -> response.getResults().stream()
+                            .flatMap(generation -> adapter.toStreamEvents(generation.getOutput()).stream())
+                            .toList());
+        })
                 .onErrorResume(ex -> Flux.just(StreamEvent.error(ex.getMessage())));
     }
 
@@ -107,6 +110,8 @@ public class SpringAiAnthropicClient implements Client {
                 .maxTokens(maxTokens)
                 // 工具执行必须留在 Cimo AgentLoop 中，不能让 Spring AI 自动吞掉 tool_use/tool_result 协议。
                 .internalToolExecutionEnabled(false)
+                // Cimo 暂不持久化 Anthropic thinking blocks，显式关闭以避免工具回合回传协议失败。
+                .thinkingDisabled()
                 .disableParallelToolUse(true)
                 .toolCallbacks(request.tools().stream().map(this::toToolCallback).toList())
                 .build();
@@ -129,41 +134,6 @@ public class SpringAiAnthropicClient implements Client {
                 throw new UnsupportedOperationException("Cimo AgentLoop executes tools explicitly.");
             }
         };
-    }
-
-    private List<StreamEvent> toStreamEvents(AssistantMessage assistantMessage) {
-        List<StreamEvent> events = new ArrayList<>();
-        if (assistantMessage.getText() != null && !assistantMessage.getText().isBlank()) {
-            events.add(StreamEvent.textDelta(assistantMessage.getText()));
-        }
-        // Spring AI 已经聚合出完整 tool call，当前 Step 1 只向上游暴露 TOOL_USE_END。
-        for (AssistantMessage.ToolCall toolCall : assistantMessage.getToolCalls()) {
-            events.add(StreamEvent.toolUseEnd(toToolCallNode(toolCall)));
-        }
-        if (events.isEmpty()) {
-            events.add(StreamEvent.complete());
-        }
-        return events;
-    }
-
-    private JsonNode toToolCallNode(AssistantMessage.ToolCall toolCall) {
-        var node = objectMapper.createObjectNode();
-        node.put("id", toolCall.id());
-        node.put("name", toolCall.name());
-        node.set("input", parseJson(toolCall.arguments()));
-        return node;
-    }
-
-    private JsonNode parseJson(String json) {
-        if (json == null || json.isBlank()) {
-            return objectMapper.createObjectNode();
-        }
-        try {
-            return objectMapper.readTree(json);
-        }
-        catch (JsonProcessingException ex) {
-            throw new IllegalArgumentException("Invalid tool call JSON: " + json, ex);
-        }
     }
 
     private String toJsonString(JsonNode node) {

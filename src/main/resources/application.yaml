@@ -5,7 +5,7 @@ spring:
 cimo:
   provider: anthropic
   debug: false
-  work-dir: ${user.dir}/Documents/Code/Cimo/.tmp
+  work-dir: ${user.dir}
   max-tool-rounds: 5
   anthropic:
     api-key: ${ANTHROPIC_API_KEY:}

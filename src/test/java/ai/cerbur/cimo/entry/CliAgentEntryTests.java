@@ -2,6 +2,9 @@ package ai.cerbur.cimo.entry;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
@@ -57,6 +60,44 @@ class CliAgentEntryTests {
         assertThat(output).contains("Result: bash: hello");
     }
 
+    @Test
+    void responseDeltaFlushesImmediately() {
+        PrintStream originalOut = System.out;
+        FlushCountingOutput output = new FlushCountingOutput();
+        System.setOut(output);
+        try {
+            CliAgentEntry entry = entry(false);
+
+            entry.onEvent(new AgentEvent.Response("hello"));
+
+            assertThat(output.text()).isEqualTo("hello");
+            assertThat(output.flushCount()).isGreaterThanOrEqualTo(1);
+        }
+        finally {
+            System.setOut(originalOut);
+        }
+    }
+
+    @Test
+    void toolOutputStartsOnNewLineAfterOpenResponse() {
+        PrintStream originalOut = System.out;
+        FlushCountingOutput output = new FlushCountingOutput();
+        System.setOut(output);
+        try {
+            CliAgentEntry entry = entry(false);
+
+            entry.onEvent(new AgentEvent.Response("hello"));
+            entry.onEvent(new AgentEvent.ToolCall("bash", bashEchoArguments("world")));
+            entry.onEvent(new AgentEvent.ToolResult("bash", "done"));
+
+            assertThat(output.text()).contains("hello" + System.lineSeparator() + "Tool: bash echo world"
+                    + System.lineSeparator() + "Result: bash: done" + System.lineSeparator());
+        }
+        finally {
+            System.setOut(originalOut);
+        }
+    }
+
     private CliAgentEntry entry(boolean debug) {
         CliAgentEntry entry = new CliAgentEntry();
         ReflectionTestUtils.setField(entry, "agentLoop", new NoopAgentLoop());
@@ -74,6 +115,35 @@ class CliAgentEntryTests {
         arguments.put("command", "echo");
         arguments.putArray("args").add(text);
         return arguments;
+    }
+
+    private static class FlushCountingOutput extends PrintStream {
+
+        private final ByteArrayOutputStream bytes;
+        private int flushCount;
+
+        FlushCountingOutput() {
+            this(new ByteArrayOutputStream());
+        }
+
+        private FlushCountingOutput(ByteArrayOutputStream bytes) {
+            super(bytes, true, StandardCharsets.UTF_8);
+            this.bytes = bytes;
+        }
+
+        @Override
+        public void flush() {
+            super.flush();
+            flushCount++;
+        }
+
+        private String text() {
+            return bytes.toString(StandardCharsets.UTF_8);
+        }
+
+        private int flushCount() {
+            return flushCount;
+        }
     }
 
     private static class NoopAgentLoop implements AgentLoop {

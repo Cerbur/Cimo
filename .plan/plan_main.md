@@ -72,3 +72,11 @@
 | 2026-05-11 03:35 CST | 新增跨阶段 QA 计划：先记录契约测试、替身端到端、CLI 黑盒、真实 provider smoke、安全边界、架构约束和 Plan QA 的候选方向；不把普通单测或覆盖率作为默认目标；暂不进入编码。 | [plan_qa.md](plan_qa.md) |
 | 2026-05-11 CST | 引入 plan 模板；后续 step 计划必须使用 Todo ID、状态、验收标准和 ADR-lite 记录；Step 1 标记为 Done / Archived / Read-only。 | 本文件 / [plan_template.md](plan_template.md) |
 | 2026-05-14 22:16 CST | 拆分代理规则文档：`AGENTS.md` 收敛为入口硬约束和索引；详细流程迁移到 `agent_process.md`；工程规范迁移到 `engineering_rules.md`；现有约束只搬迁不删除。 | [../AGENTS.md](../AGENTS.md) / [agent_process.md](agent_process.md) / [engineering_rules.md](engineering_rules.md) |
+
+---
+
+## 后续规划提醒
+
+> 这里只记录跨阶段提醒，不代表已进入某个 step 的执行范围；创建或迭代后续 `plan_stepN.md` 时，代理需要主动提醒用户评估是否纳入。
+
+- Anthropic thinking block 支持：当前为保证工具回合协议稳定，默认显式关闭 thinking。后续若需要展示 thinking，需要先规划“thinking block 持久化、按原顺序回传 provider、CLI 可选展示/隐藏、真实 provider smoke 验证”这一整条能力，不能只移除 `thinkingDisabled()`。

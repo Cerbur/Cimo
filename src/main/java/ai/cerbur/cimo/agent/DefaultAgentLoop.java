@@ -55,7 +55,14 @@ public class DefaultAgentLoop implements AgentLoop {
 
         // 每一轮最多只处理一次 assistant turn 和随后的工具结果，避免模型持续要求工具时无限循环。
         for (int round = 0; round < context.maxToolRounds(); round++) {
-            AssistantTurn turn = callClient();
+            AssistantTurn turn;
+            try {
+                turn = callClient();
+            }
+            catch (RuntimeException ex) {
+                emit(new AgentEvent.Error(ex.getMessage()));
+                return;
+            }
             history.add(new ChatMessage(ChatRole.ASSISTANT, turn.content()));
             if (turn.toolUses().isEmpty()) {
                 emit(new AgentEvent.Response("\n"));
@@ -65,13 +72,19 @@ public class DefaultAgentLoop implements AgentLoop {
             List<ContentBlock> toolResults = new ArrayList<>();
             for (ContentBlock.ToolUse toolUse : turn.toolUses()) {
                 emit(new AgentEvent.ToolCall(toolUse.name(), toolUse.input()));
-                Tool tool = context.toolRegistry().getTool(toolUse.name())
-                        .orElseThrow(() -> new IllegalArgumentException("Unknown tool: " + toolUse.name()));
-                ToolResult result = tool.execute(toolExecutionContext, toolUse.input());
-                String content = result.success() ? result.output() : result.error();
-                emit(new AgentEvent.ToolResult(toolUse.name(), content));
-                // toolUseId 必须沿用模型给出的 id，否则 provider 无法把结果关联回对应 tool_use。
-                toolResults.add(new ContentBlock.ToolResult(toolUse.id(), content, !result.success()));
+                try {
+                    Tool tool = context.toolRegistry().getTool(toolUse.name())
+                            .orElseThrow(() -> new IllegalArgumentException("Unknown tool: " + toolUse.name()));
+                    ToolResult result = tool.execute(toolExecutionContext, toolUse.input());
+                    String content = result.success() ? result.output() : result.error();
+                    emit(new AgentEvent.ToolResult(toolUse.name(), content));
+                    // toolUseId 必须沿用模型给出的 id，否则 provider 无法把结果关联回对应 tool_use。
+                    toolResults.add(new ContentBlock.ToolResult(toolUse.id(), content, !result.success()));
+                }
+                catch (RuntimeException ex) {
+                    emit(new AgentEvent.Error(ex.getMessage()));
+                    return;
+                }
             }
             history.add(new ChatMessage(ChatRole.USER, toolResults));
         }

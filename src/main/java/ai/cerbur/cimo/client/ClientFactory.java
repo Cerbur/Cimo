@@ -53,7 +53,8 @@ public class ClientFactory {
         AnthropicChatOptions.Builder options = AnthropicChatOptions.builder()
                 .apiKey(anthropicProperties.apiKey())
                 .model(anthropicProperties.model())
-                .baseUrl(anthropicProperties.baseUrl());
+                .baseUrl(anthropicProperties.baseUrl())
+                .thinkingDisabled();
         return AnthropicChatModel.builder()
                 .options(options.build())
                 .build();

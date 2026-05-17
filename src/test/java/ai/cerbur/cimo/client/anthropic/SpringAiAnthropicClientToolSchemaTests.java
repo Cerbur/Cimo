@@ -3,15 +3,19 @@ package ai.cerbur.cimo.client.anthropic;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.List;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.anthropic.AnthropicChatOptions;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import ai.cerbur.cimo.client.model.ClientRequest;
 import ai.cerbur.cimo.tool.Tool;
 import ai.cerbur.cimo.tool.ToolExecutionContext;
 import ai.cerbur.cimo.tool.ToolResult;
@@ -42,6 +46,17 @@ class SpringAiAnthropicClientToolSchemaTests {
         assertThatThrownBy(() -> callback.call("{}"))
                 .isInstanceOf(UnsupportedOperationException.class)
                 .hasMessage("Cimo AgentLoop executes tools explicitly.");
+    }
+
+    @Test
+    void disablesAnthropicThinkingForToolRounds() {
+        SpringAiAnthropicClient client = new SpringAiAnthropicClient(null, objectMapper, 1024);
+        ClientRequest request = new ClientRequest("system", List.of(), List.of(new SchemaOnlyTool()));
+
+        AnthropicChatOptions options = ReflectionTestUtils.invokeMethod(client, "toAnthropicOptions", request);
+
+        assertThat(options.getThinking()).isNotNull();
+        assertThat(options.getThinking().isDisabled()).isTrue();
     }
 
     private ToolCallback toToolCallback(SpringAiAnthropicClient client, Tool tool) {

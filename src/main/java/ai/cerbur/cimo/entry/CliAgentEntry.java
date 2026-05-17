@@ -42,6 +42,8 @@ public class CliAgentEntry implements AgentEntry, ApplicationRunner, AgentEventH
     @Autowired
     private ToolRegistry toolRegistry;
 
+    private boolean responseLineOpen;
+
     @Override
     public void run(ApplicationArguments args) {
         start();
@@ -96,19 +98,28 @@ public class CliAgentEntry implements AgentEntry, ApplicationRunner, AgentEventH
     @Override
     public void onEvent(AgentEvent event) {
         switch (event) {
-            case AgentEvent.Thinking thinking -> System.out.println("Thinking: " + thinking.message());
-            case AgentEvent.ToolCall toolCall -> System.out.println(formatToolCall(toolCall));
-            case AgentEvent.ToolResult toolResult -> System.out.println(formatToolResult(toolResult));
-            case AgentEvent.Response response -> System.out.print(response.content());
-            case AgentEvent.Error error -> System.out.println("Error: " + error.message());
+            case AgentEvent.Thinking thinking -> {
+                ensureResponseLineClosed();
+                System.out.println("Thinking: " + thinking.message());
+            }
+            case AgentEvent.ToolCall toolCall -> {
+                ensureResponseLineClosed();
+                System.out.println(formatToolCall(toolCall));
+            }
+            case AgentEvent.ToolResult toolResult -> {
+                ensureResponseLineClosed();
+                System.out.println(formatToolResult(toolResult));
+            }
+            case AgentEvent.Response response -> {
+                System.out.print(response.content());
+                responseLineOpen = !response.content().endsWith("\n");
+            }
+            case AgentEvent.Error error -> {
+                ensureResponseLineClosed();
+                System.out.println("Error: " + error.message());
+            }
         }
-        // Response 事件可能是文本增量，只有工具结果或错误这类完整行事件才主动 flush。
-        if (event instanceof AgentEvent.Response response && response.content().endsWith("\n")) {
-            return;
-        }
-        if (event instanceof AgentEvent.ToolResult || event instanceof AgentEvent.Error) {
-            System.out.flush();
-        }
+        System.out.flush();
     }
 
     private void printBanner() {
@@ -129,6 +140,13 @@ public class CliAgentEntry implements AgentEntry, ApplicationRunner, AgentEventH
 
     private String formatToolResult(AgentEvent.ToolResult toolResult) {
         return "Result: " + toolResult.toolName() + ": " + toolResult.result();
+    }
+
+    private void ensureResponseLineClosed() {
+        if (responseLineOpen) {
+            System.out.println();
+            responseLineOpen = false;
+        }
     }
 
     /**
