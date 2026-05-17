@@ -9,5 +9,5 @@
 
   Provider : ${cimo.banner.provider}
   Model    : ${cimo.banner.model}
+  Work dir : ${cimo.work-dir}
   Tip      : type 'exit' or 'quit' to leave
-

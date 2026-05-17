@@ -18,6 +18,7 @@ class CimoBannerResourceTests {
         MockEnvironment environment = new MockEnvironment()
                 .withProperty("cimo.banner.provider", "anthropic")
                 .withProperty("cimo.banner.model", "test-model")
+                .withProperty("cimo.work-dir", "/tmp/cimo")
                 .withProperty("cimo.anthropic.api-key", "secret-key")
                 .withProperty("cimo.anthropic.base-url", "https://example.invalid");
 
@@ -27,6 +28,7 @@ class CimoBannerResourceTests {
                 .contains("Cimo Agent Harness")
                 .contains("Provider : anthropic")
                 .contains("Model    : test-model")
+                .contains("Work dir : /tmp/cimo")
                 .doesNotContain("secret-key")
                 .doesNotContain("https://example.invalid")
                 .doesNotContain("api-key")

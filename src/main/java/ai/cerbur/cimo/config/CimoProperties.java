@@ -16,7 +16,7 @@ public record CimoProperties(
         provider = normalizeProvider(provider);
         workDir = normalizeWorkDir(workDir);
         if (maxToolRounds <= 0) {
-            maxToolRounds = 5;
+            maxToolRounds = 100000;
         }
     }
 
