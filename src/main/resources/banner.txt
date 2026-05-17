@@ -1,0 +1,13 @@
+
+   ________  __  ___  ____
+  / ___/ _ \/  |/  / / __ \
+ / /__/  __/ /|_/ / / /_/ /
+ \___/\___/_/  /_/  \____/
+
+  Cimo Agent Harness
+  Local coding agent runtime for reading, changing, and verifying workspace code.
+
+  Provider : ${cimo.banner.provider}
+  Model    : ${cimo.banner.model}
+  Tip      : type 'exit' or 'quit' to leave
+

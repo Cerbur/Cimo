@@ -1,6 +1,8 @@
 spring:
   application:
     name: Cimo
+  main:
+    log-startup-info: false
 
 cimo:
   provider: anthropic

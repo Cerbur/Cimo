@@ -57,7 +57,6 @@ public class CliAgentEntry implements AgentEntry, ApplicationRunner, AgentEventH
                 CimoPrompts.STEP_1_SYSTEM_PROMPT,
                 toolRegistry,
                 cimoProperties.maxToolRounds()), this);
-        printBanner();
         try (Terminal terminal = TerminalBuilder.builder().system(true).build()) {
             LineReader reader = LineReaderBuilder.builder().terminal(terminal).build();
             while (true) {
@@ -120,14 +119,6 @@ public class CliAgentEntry implements AgentEntry, ApplicationRunner, AgentEventH
             }
         }
         System.out.flush();
-    }
-
-    private void printBanner() {
-        System.out.println("""
-
-                  Cimo Agent
-                  Type 'exit' to quit
-                """);
     }
 
     private String formatToolCall(AgentEvent.ToolCall toolCall) {
