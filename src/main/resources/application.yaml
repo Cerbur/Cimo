@@ -8,7 +8,7 @@ cimo:
   provider: anthropic
   debug: false
   work-dir: ${user.dir}
-  max-tool-rounds: 100000
+  max-tool-rounds: 128
   anthropic:
     api-key: ${ANTHROPIC_API_KEY:}
     model: ${ANTHROPIC_MODEL:}

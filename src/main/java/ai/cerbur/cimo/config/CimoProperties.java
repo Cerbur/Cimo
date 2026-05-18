@@ -12,11 +12,13 @@ public record CimoProperties(
         String workDir,
         int maxToolRounds) {
 
+    public static final int DEFAULT_MAX_TOOL_ROUNDS = 128;
+
     public CimoProperties {
         provider = normalizeProvider(provider);
         workDir = normalizeWorkDir(workDir);
         if (maxToolRounds <= 0) {
-            maxToolRounds = 100000;
+            maxToolRounds = DEFAULT_MAX_TOOL_ROUNDS;
         }
     }
 

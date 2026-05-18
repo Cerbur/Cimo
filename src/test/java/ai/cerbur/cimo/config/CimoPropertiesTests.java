@@ -20,7 +20,7 @@ class CimoPropertiesTests {
             assertThat(properties.provider()).isEqualTo("anthropic");
             assertThat(properties.debug()).isFalse();
             assertThat(properties.workDir()).isEqualTo(System.getProperty("user.dir"));
-            assertThat(properties.maxToolRounds()).isEqualTo(100000);
+            assertThat(properties.maxToolRounds()).isEqualTo(CimoProperties.DEFAULT_MAX_TOOL_ROUNDS);
         });
     }
 
@@ -39,6 +39,28 @@ class CimoPropertiesTests {
                     assertThat(properties.debug()).isTrue();
                     assertThat(properties.workDir()).isEqualTo("/tmp/cimo");
                     assertThat(properties.maxToolRounds()).isEqualTo(9);
+                });
+    }
+
+    @Test
+    void fallsBackToDefaultMaxToolRoundsWhenConfiguredAsZero() {
+        contextRunner
+                .withPropertyValues("cimo.max-tool-rounds=0")
+                .run(context -> {
+                    CimoProperties properties = context.getBean(CimoProperties.class);
+
+                    assertThat(properties.maxToolRounds()).isEqualTo(CimoProperties.DEFAULT_MAX_TOOL_ROUNDS);
+                });
+    }
+
+    @Test
+    void fallsBackToDefaultMaxToolRoundsWhenConfiguredAsNegative() {
+        contextRunner
+                .withPropertyValues("cimo.max-tool-rounds=-1")
+                .run(context -> {
+                    CimoProperties properties = context.getBean(CimoProperties.class);
+
+                    assertThat(properties.maxToolRounds()).isEqualTo(CimoProperties.DEFAULT_MAX_TOOL_ROUNDS);
                 });
     }
 

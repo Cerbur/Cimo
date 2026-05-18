@@ -98,6 +98,27 @@ class DefaultAgentLoopToolExecutionContextTests {
                         .isEqualTo(new AgentEvent.Error("tool exploded")));
     }
 
+    @Test
+    void emitsDiagnosticErrorAndStopsWhenMaxToolRoundsReached() {
+        LoopingToolCallingClient client = new LoopingToolCallingClient();
+        DefaultAgentLoop loop = new DefaultAgentLoop(new FakeClientFactory(client));
+        List<AgentEvent> events = new ArrayList<>();
+
+        loop.start(new AgentContext(
+                workspacePath(),
+                "system",
+                new ToolRegistry(List.of(new RecordingTool())),
+                2), events::add);
+
+        assertThatCode(() -> loop.processInput("keep using tool")).doesNotThrowAnyException();
+
+        assertThat(client.calls).isEqualTo(2);
+        assertThat(events)
+                .anySatisfy(event -> assertThat(event)
+                        .isEqualTo(new AgentEvent.Error("Reached max tool rounds: 2. "
+                                + "The task may be looping or needs a higher cimo.max-tool-rounds value.")));
+    }
+
     private String workspacePath() {
         return Path.of("build", "..").toAbsolutePath().normalize().toString();
     }
@@ -162,6 +183,20 @@ class DefaultAgentLoopToolExecutionContextTests {
             return Flux.just(StreamEvent.toolUseEnd(toolCall(
                     "tool-1",
                     toolName,
+                    objectMapper.createObjectNode())));
+        }
+    }
+
+    private class LoopingToolCallingClient implements Client {
+
+        private int calls;
+
+        @Override
+        public Flux<StreamEvent> chatStream(ClientRequest request) {
+            calls++;
+            return Flux.just(StreamEvent.toolUseEnd(toolCall(
+                    "tool-" + calls,
+                    "record",
                     objectMapper.createObjectNode())));
         }
     }

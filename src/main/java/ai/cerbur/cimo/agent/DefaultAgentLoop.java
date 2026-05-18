@@ -89,7 +89,8 @@ public class DefaultAgentLoop implements AgentLoop {
             history.add(new ChatMessage(ChatRole.USER, toolResults));
         }
 
-        emit(new AgentEvent.Error("Reached max tool rounds: " + context.maxToolRounds()));
+        emit(new AgentEvent.Error("Reached max tool rounds: " + context.maxToolRounds()
+                + ". The task may be looping or needs a higher cimo.max-tool-rounds value."));
     }
 
     @Override
